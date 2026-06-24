@@ -449,8 +449,11 @@ async function pullNow(){
       const hasRemote=remote&&((remote.entries&&remote.entries.length)||(remote.food&&remote.food.length)||(remote.weights&&remote.weights.length));
       if(hasRemote){ applyPayload(remote); }
       else {
-        // new user: seed their account with the demo history once, then push
-        if(!STORE.seedImported) seedNewUser();
+        // brand-new account: start blank (no demo history). Mark as initialized so
+        // the built-in DB demo data is never merged in, then save the empty state.
+        STORE.entries=STORE.entries||[]; STORE.food=STORE.food||[]; STORE.weights=STORE.weights||[];
+        STORE.seedImported=true;
+        try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
         await pushNow();
       }
       const t=new Date().toLocaleTimeString(); setSyncStatus("Synced ✓ "+t,"ok");
@@ -460,17 +463,6 @@ async function pullNow(){
     } else if(/sign-in/i.test(j.error||"")){ requireSignIn(); }
     else setSyncStatus("Load error: "+(j.error||"unknown"),"err");
   }catch(e){ setSyncStatus("Couldn't reach the server.","err"); }
-}
-function seedNewUser(){
-  // fold the built-in demo history into STORE so each new account starts populated
-  const existingKeys=new Set((STORE.entries||[]).map(e=>e.kind+"|"+e.date+"|"+(e.type||e.activity||"")));
-  (DB.entries||[]).forEach(e=>{ const k=e.kind+"|"+e.date+"|"+(e.type||e.activity||""); if(!existingKeys.has(k)) STORE.entries.push(JSON.parse(JSON.stringify(e))); });
-  STORE.food=STORE.food||[];
-  const ef=new Set((STORE.food||[]).map(f=>f._id));
-  (DB.food||[]).forEach(f=>{ if(!ef.has(f._id)) STORE.food.push(JSON.parse(JSON.stringify(f))); });
-  seedStarterWeight();
-  STORE.seedImported=true;
-  try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
 }
 function setSyncStatus(msg,kind){
   const el=document.getElementById("syncStatus"); if(el){
@@ -531,9 +523,8 @@ function initGoogle(){
 let STORE = loadStore();
 if(!STORE.profile) STORE.profile = JSON.parse(JSON.stringify(DB.profile));
 if(!STORE.weights) STORE.weights = [];
-
-// include a starter weigh-in only when seeding the demo history for a new account
-function seedStarterWeight(){ if(!STORE.weights||!STORE.weights.length) STORE.weights=[{date:"2026-06-24", kg:96.6}]; }
+// never show the built-in demo data in the multi-user app; real data comes from the Sheet
+if(typeof STORE.seedImported==="undefined") STORE.seedImported = true;
 
 function entries(){ const base = STORE.seedImported ? [] : DB.entries; return base.concat(STORE.entries).slice().sort((a,b)=> a.date<b.date?-1:1); }
 function strengthEntries(){ return entries().filter(e=>e.kind==="strength"); }

@@ -21,24 +21,31 @@ async function verifyUser(idToken) {
   } catch (e) { return null; }
 }
 
-const SYSTEM = `You convert a user's fitness log input into structured JSON for a tracker.
-The input is either a description of food eaten, or a strength/cardio workout, given as text and/or an image of a meal.
+const SYSTEM = `You are a fitness logging assistant AND a practical nutrition/training coach inside a tracker app.
+The user sends a message (and sometimes a food photo), plus a summary of their training/weight HISTORY and a snapshot of their current day's numbers.
 
-Return ONLY a JSON object, no markdown, no prose. Pick ONE shape based on the input:
+Decide what they want — they may be LOGGING something, ASKING for advice, or BOTH in one message.
 
-FOOD (a meal or food items):
-{"kind":"food","items":[{"name":"short name","kcal":<int>,"p":<grams protein int>,"c":<grams carbs int>,"fat":<grams fat int>}]}
-- Estimate realistic values. One entry per distinct item, or a single combined entry for a mixed plate.
-- Be honest and slightly conservative; portion sizes from a photo are approximate.
+Return ONLY a JSON object, no markdown fences, no prose outside the JSON. Use this shape:
+{
+  "log": <null, or one of the log objects below>,
+  "reply": "<short coaching reply in plain language, or empty string if they only logged>"
+}
 
-STRENGTH workout:
-{"kind":"strength","type":"Push|Pull|Legs|Other","exercises":[{"name":"Exercise Name","sets":[{"reps":<int>,"weight":<kg number, 0 for bodyweight, negative for assisted>}]}]}
-- Infer the type (Push/Pull/Legs) from the exercises. Use proper capitalized exercise names.
+LOG object options (set "log" to one of these, or null if nothing to log):
+- Food: {"kind":"food","items":[{"name":"short name","kcal":<int>,"p":<int>,"c":<int>,"fat":<int>}]}
+- Strength: {"kind":"strength","type":"Push|Pull|Legs|Other","exercises":[{"name":"Name","sets":[{"reps":<int>,"weight":<kg, 0=bodyweight, negative=assisted>}]}]}
+- Cardio: {"kind":"cardio","activity":"Run|Walk|Cycle|Row|Swim","distance_km":<num|null>,"duration_min":<num|null>,"calories":<int|null>}
 
-CARDIO workout:
-{"kind":"cardio","activity":"Run|Walk|Cycle|Row|Swim","distance_km":<number or null>,"duration_min":<number or null>,"calories":<int or null>}
+REPLY guidance:
+- Use the user's actual numbers from the context (protein gap, remaining calories, deficit) to give specific, actionable next steps.
+- When relevant, reference their HISTORY: lift progression (e1RM trends), training frequency/balance, and weight trajectory. E.g. "your bench e1RM is up 8kg" or "your weight trend is -0.4kg/week, right on track."
+- Keep it short and practical: concrete foods/amounts, simple swaps. 2-4 sentences max.
+- Stay in the lane of general fitness and nutrition. Keep any suggested deficit sensible (not aggressive starvation). 
+- Do NOT give medical advice, diagnose, or address eating-disorder territory; if a message suggests that, gently suggest a professional and keep it brief.
+- If they only logged something with no question, "reply" can be a one-line confirmation or empty string.
 
-If you truly cannot tell, return {"kind":"unknown"}.`;
+If you cannot tell what they mean at all, return {"log":null,"reply":"<a brief clarifying question>"}.`;
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -50,17 +57,21 @@ module.exports = async (req, res) => {
 
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }
-  const { idToken, text, image, mediaType } = body || {};
+  const { idToken, text, image, mediaType, context, history } = body || {};
 
   const user = await verifyUser(idToken);
   if (!user) return res.status(401).json({ ok: false, error: 'Please sign in again.' });
 
-  // Build the Claude message content (text and/or image)
+  // Build the Claude message content (text and/or image), prefixed with the snapshots
   const content = [];
   if (image) {
     content.push({ type: 'image', source: { type: 'base64', media_type: mediaType || 'image/jpeg', data: image } });
   }
-  content.push({ type: 'text', text: (text && text.trim()) ? text.trim() : 'Estimate the food in this image.' });
+  let userText = '';
+  if (history) { userText += `${history}\n\n`; }
+  if (context) { userText += `[Today's snapshot] ${context}\n\n`; }
+  userText += (text && text.trim()) ? text.trim() : 'Estimate the food in this image and log it.';
+  content.push({ type: 'text', text: userText });
 
   try {
     const r = await fetch('https://api.anthropic.com/v1/messages', {

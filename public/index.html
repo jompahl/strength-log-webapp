@@ -175,7 +175,19 @@
       <div id="syncStatus" style="font-size:13px; margin-bottom:14px; padding:10px 12px; border-radius:8px; background:var(--panel2)"></div>
       <div style="display:flex; gap:10px; flex-wrap:wrap">
         <button class="ghost" id="syncPush">Sync now</button>
+        <button class="ghost" id="importBtn">Import data…</button>
         <button class="ghost" id="signOutBtn" style="margin-left:auto">Sign out</button>
+      </div>
+      <div id="importBox" style="display:none; margin-top:14px">
+        <div class="field" style="margin-bottom:8px">
+          <label>Paste exported JSON (from your old sheet's Data cell)</label>
+          <textarea id="importText" placeholder='{"entries":[...],"food":[...],"weights":[...],...}' style="width:100%; min-height:120px; background:var(--panel2); border:1px solid var(--line); border-radius:8px; color:var(--ink); padding:10px; font-size:12px; font-family:ui-monospace,monospace"></textarea>
+        </div>
+        <div style="display:flex; gap:10px; justify-content:flex-end">
+          <button class="ghost" id="importCancel">Cancel</button>
+          <button class="primary" id="importConfirm">Load &amp; save to my account</button>
+        </div>
+        <div class="hint" style="margin-top:8px">This replaces your current data with the pasted data, then saves it to your account.</div>
       </div>
       <div class="hint" style="margin-top:14px; line-height:1.6">
         Your data saves automatically a moment after each change, and loads when you sign in on any device.
@@ -406,6 +418,7 @@ const API_URL = "/api/sync";
 let ID_TOKEN = null;        // current Google ID token (proof of identity)
 let CURRENT_USER = null;    // {email, name}
 let pushTimer=null;
+let FIRST_PULL_DONE=false;  // becomes true after the initial load; gates pushes
 
 function syncPayload(){
   return {entries:STORE.entries||[], food:STORE.food||[], weights:STORE.weights||[],
@@ -421,6 +434,7 @@ function applyPayload(d){
 
 function schedulePush(){
   if(!ID_TOKEN) return;            // not signed in → local only
+  if(!FIRST_PULL_DONE) return;     // never push before we've loaded from the server
   clearTimeout(pushTimer);
   pushTimer=setTimeout(pushNow, 1500);
 }
@@ -447,13 +461,14 @@ async function pullNow(){
     if(j.ok){
       const remote=j.data;
       const hasRemote=remote&&((remote.entries&&remote.entries.length)||(remote.food&&remote.food.length)||(remote.weights&&remote.weights.length));
-      if(hasRemote){ applyPayload(remote); }
+      if(hasRemote){ applyPayload(remote); FIRST_PULL_DONE=true; }
       else {
         // brand-new account: start blank (no demo history). Mark as initialized so
         // the built-in DB demo data is never merged in, then save the empty state.
         STORE.entries=STORE.entries||[]; STORE.food=STORE.food||[]; STORE.weights=STORE.weights||[];
         STORE.seedImported=true;
         try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
+        FIRST_PULL_DONE=true;   // safe to push now: we've confirmed the account is empty
         await pushNow();
       }
       const t=new Date().toLocaleTimeString(); setSyncStatus("Synced ✓ "+t,"ok");
@@ -986,6 +1001,35 @@ document.getElementById("acctBtn").addEventListener("click",()=>{
 document.getElementById("syncClose").addEventListener("click",()=>{ syncModal.style.display="none"; });
 syncModal.addEventListener("click",e=>{ if(e.target===syncModal) syncModal.style.display="none"; });
 document.getElementById("syncPush").addEventListener("click",pushNow);
+document.getElementById("importBtn").addEventListener("click",()=>{
+  const box=document.getElementById("importBox");
+  box.style.display = box.style.display==="none" ? "block" : "none";
+});
+document.getElementById("importCancel").addEventListener("click",()=>{
+  document.getElementById("importBox").style.display="none";
+  document.getElementById("importText").value="";
+});
+document.getElementById("importConfirm").addEventListener("click",async ()=>{
+  const raw=document.getElementById("importText").value.trim();
+  if(!raw){ setSyncStatus("Paste your JSON first.","err"); return; }
+  let parsed;
+  try{ parsed=JSON.parse(raw); }catch(e){ setSyncStatus("That isn't valid JSON — check you copied the whole cell.","err"); return; }
+  if(!parsed.entries && !parsed.weights && !parsed.food){ setSyncStatus("JSON loaded but has no entries/weights/food — is this the right data?","err"); return; }
+  // load into STORE and persist + push to the sheet
+  applyPayload(parsed);
+  STORE.seedImported=true;
+  FIRST_PULL_DONE=true;
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
+  document.getElementById("importBox").style.display="none";
+  document.getElementById("importText").value="";
+  setSyncStatus("Imported — saving to your account…","wait");
+  await pushNow();
+  // refresh all views
+  buildStrip(); buildSelect(); renderStrength(); rebuildDatalist();
+  if(document.getElementById("view-cardio").classList.contains("on")) buildCardio();
+  if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
+  setSyncStatus("Imported and saved ✓","ok");
+});
 document.getElementById("signOutBtn").addEventListener("click",()=>{
   syncModal.style.display="none";
   try{ google.accounts.id.disableAutoSelect(); }catch(e){}

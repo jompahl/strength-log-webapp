@@ -195,6 +195,23 @@
     </div>
   </div>
 
+  <div id="quickAdd" style="background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:18px">
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+      <input type="text" id="qaText" placeholder="Tell me what you ate or lifted — e.g. '2 eggs and toast' or 'bench 5x80, incline db 8x30'"
+        style="flex:1; min-width:200px; background:var(--panel2); border:1px solid var(--line); border-radius:9px; color:var(--ink); padding:11px 13px; font-size:14px">
+      <input type="file" id="qaPhoto" accept="image/*" style="display:none">
+      <button class="ghost" id="qaPhotoBtn" title="Add a food photo" style="padding:11px 13px">📷</button>
+      <button class="primary" id="qaSend" style="padding:11px 18px">Add</button>
+    </div>
+    <div id="qaPreviewWrap" style="display:none; margin-top:10px; align-items:center; gap:10px">
+      <img id="qaPreview" style="height:48px; border-radius:6px; border:1px solid var(--line)">
+      <span id="qaPhotoName" style="color:var(--muted); font-size:12px"></span>
+      <button class="xBtn" id="qaPhotoClear" style="font-size:15px">✕</button>
+    </div>
+    <div id="qaStatus" style="font-size:12.5px; color:var(--faint); margin-top:8px; min-height:16px"></div>
+    <div id="qaConfirm" style="display:none; margin-top:10px; background:var(--panel2); border:1px solid var(--line); border-radius:9px; padding:12px"></div>
+  </div>
+
   <div class="tabs">
     <button data-v="strength" class="on">Strength</button>
     <button data-v="cardio">Cardio</button>
@@ -1001,6 +1018,115 @@ document.getElementById("acctBtn").addEventListener("click",()=>{
 document.getElementById("syncClose").addEventListener("click",()=>{ syncModal.style.display="none"; });
 syncModal.addEventListener("click",e=>{ if(e.target===syncModal) syncModal.style.display="none"; });
 document.getElementById("syncPush").addEventListener("click",pushNow);
+
+/* ---- "talk to it" quick add ---- */
+let QA_IMAGE=null, QA_MEDIA=null;
+document.getElementById("qaPhotoBtn").addEventListener("click",()=>document.getElementById("qaPhoto").click());
+document.getElementById("qaPhoto").addEventListener("change",e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    QA_IMAGE=reader.result.split(",")[1]; QA_MEDIA=f.type||"image/jpeg";
+    document.getElementById("qaPreview").src=reader.result;
+    document.getElementById("qaPhotoName").textContent=f.name;
+    document.getElementById("qaPreviewWrap").style.display="flex";
+  };
+  reader.readAsDataURL(f);
+});
+document.getElementById("qaPhotoClear").addEventListener("click",()=>{
+  QA_IMAGE=null; QA_MEDIA=null; document.getElementById("qaPhoto").value="";
+  document.getElementById("qaPreviewWrap").style.display="none";
+});
+function qaStatus(msg,kind){ const el=document.getElementById("qaStatus");
+  el.style.color = kind==="err"?"var(--red)":kind==="ok"?"var(--green)":kind==="wait"?"var(--amber)":"var(--faint)";
+  el.textContent=msg; }
+
+async function qaSend(){
+  const text=document.getElementById("qaText").value.trim();
+  if(!text && !QA_IMAGE){ qaStatus("Type something or add a photo first.","err"); return; }
+  qaStatus("Reading…","wait");
+  document.getElementById("qaConfirm").style.display="none";
+  try{
+    const res=await fetch("/api/parse",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({idToken:ID_TOKEN, text, image:QA_IMAGE, mediaType:QA_MEDIA})});
+    const j=await res.json();
+    if(!j.ok){ qaStatus(j.error||"Couldn't parse that.","err"); return; }
+    showConfirm(j.result);
+    qaStatus("","");
+  }catch(e){ qaStatus("Couldn't reach the server.","err"); }
+}
+document.getElementById("qaSend").addEventListener("click",qaSend);
+document.getElementById("qaText").addEventListener("keydown",e=>{ if(e.key==="Enter") qaSend(); });
+
+// Show an editable confirmation before committing (estimates need a human glance)
+function showConfirm(r){
+  const box=document.getElementById("qaConfirm");
+  const today=new Date().toISOString().slice(0,10);
+  if(r.kind==="food" && r.items && r.items.length){
+    const rows=r.items.map((it,i)=>`<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px">
+      <input data-f="name" data-i="${i}" value="${(it.name||'').replace(/"/g,'&quot;')}" style="flex:1; background:var(--bg); border:1px solid var(--line); border-radius:6px; color:var(--ink); padding:6px 8px; font-size:13px">
+      <input data-f="kcal" data-i="${i}" type="number" value="${it.kcal||0}" style="width:70px; background:var(--bg); border:1px solid var(--line); border-radius:6px; color:var(--ink); padding:6px; font-size:13px"> kcal
+      <input data-f="p" data-i="${i}" type="number" value="${it.p||0}" style="width:54px; background:var(--bg); border:1px solid var(--line); border-radius:6px; color:var(--ink); padding:6px; font-size:13px">P
+    </div>`).join("");
+    box.innerHTML=`<div style="font-weight:650; margin-bottom:8px">Food — adds to today (${today})</div>${rows}
+      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px">
+        <button class="ghost" id="qaCancel">Cancel</button><button class="primary" id="qaCommit">Add to log</button></div>
+      <div class="hint" style="margin-top:6px">Estimates are approximate — tweak any number before adding.</div>`;
+    box.style.display="block";
+    document.getElementById("qaCommit").onclick=()=>{
+      const items=r.items.map((it,i)=>({
+        name:box.querySelector(`[data-f="name"][data-i="${i}"]`).value,
+        kcal:parseFloat(box.querySelector(`[data-f="kcal"][data-i="${i}"]`).value)||0,
+        p:parseFloat(box.querySelector(`[data-f="p"][data-i="${i}"]`).value)||0,
+        c:it.c||0, fat:it.fat||0 }));
+      STORE.food=STORE.food||[];
+      items.forEach(it=> STORE.food.push({_id:"f"+Date.now()+Math.random().toString(36).slice(2,6), date:today, ...it}));
+      commitQuickAdd("Added "+items.length+" food item"+(items.length>1?"s":""));
+    };
+  } else if(r.kind==="strength" && r.exercises && r.exercises.length){
+    const summary=r.exercises.map(ex=>`${ex.name} — ${ex.sets.map(s=>`${s.reps}×${s.weight===0?'BW':s.weight}`).join(", ")}`).join("<br>");
+    box.innerHTML=`<div style="font-weight:650; margin-bottom:8px">${r.type||'Strength'} session — today (${today})</div>
+      <div style="font-size:13px; color:var(--muted); line-height:1.7">${summary}</div>
+      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px">
+        <button class="ghost" id="qaCancel">Cancel</button><button class="primary" id="qaCommit">Add session</button></div>`;
+    box.style.display="block";
+    document.getElementById("qaCommit").onclick=()=>{
+      const exercises=r.exercises.map(ex=>({name:ex.name, muscle:(MUSCLE[ex.name]||"Other"), sets:ex.sets}));
+      STORE.entries.push({kind:"strength", date:today, type:r.type||"Other", exercises});
+      commitQuickAdd(r.type+" session added");
+    };
+  } else if(r.kind==="cardio"){
+    const pace = (r.distance_km&&r.duration_min)? (r.duration_min/r.distance_km):null;
+    box.innerHTML=`<div style="font-weight:650; margin-bottom:8px">Cardio — today (${today})</div>
+      <div style="font-size:13px; color:var(--muted)">${r.activity||'Cardio'} · ${r.distance_km?r.distance_km+' km':''} ${r.duration_min?'· '+r.duration_min+' min':''} ${r.calories?'· '+r.calories+' kcal':''}</div>
+      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px">
+        <button class="ghost" id="qaCancel">Cancel</button><button class="primary" id="qaCommit">Add cardio</button></div>`;
+    box.style.display="block";
+    document.getElementById("qaCommit").onclick=()=>{
+      const e={kind:"cardio", date:today, activity:r.activity||"Run"};
+      if(r.distance_km) e.distance_km=r.distance_km; if(r.duration_min) e.duration_min=r.duration_min;
+      if(pace) e.pace_min_km=pace; if(r.calories) e.calories=r.calories;
+      STORE.entries.push(e);
+      commitQuickAdd("Cardio added");
+    };
+  } else {
+    qaStatus("Couldn't tell if that was food or a workout — try being more specific.","err");
+    return;
+  }
+  // shared cancel
+  const c=document.getElementById("qaCancel"); if(c) c.onclick=()=>{ box.style.display="none"; };
+}
+function commitQuickAdd(msg){
+  saveStore(STORE);  // persists + schedules push to sheet
+  document.getElementById("qaConfirm").style.display="none";
+  document.getElementById("qaText").value="";
+  document.getElementById("qaPhotoClear").click();
+  qaStatus(msg+" ✓","ok");
+  // refresh views
+  buildStrip(); buildSelect(); renderStrength(); rebuildDatalist();
+  if(document.getElementById("view-cardio").classList.contains("on")) buildCardio();
+  if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
+}
 document.getElementById("importBtn").addEventListener("click",()=>{
   const box=document.getElementById("importBox");
   box.style.display = box.style.display==="none" ? "block" : "none";

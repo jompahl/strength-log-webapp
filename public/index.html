@@ -197,7 +197,7 @@
 
   <div id="quickAdd" style="background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:18px">
     <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-      <input type="text" id="qaText" placeholder="Tell me what you ate or lifted — e.g. '2 eggs and toast' or 'bench 5x80, incline db 8x30'"
+      <input type="text" id="qaText" placeholder="Log food/workouts or ask for advice — e.g. 'what should I eat to hit my protein?'"
         style="flex:1; min-width:200px; background:var(--panel2); border:1px solid var(--line); border-radius:9px; color:var(--ink); padding:11px 13px; font-size:14px">
       <input type="file" id="qaPhoto" accept="image/*" style="display:none">
       <button class="ghost" id="qaPhotoBtn" title="Add a food photo" style="padding:11px 13px">📷</button>
@@ -1041,34 +1041,120 @@ function qaStatus(msg,kind){ const el=document.getElementById("qaStatus");
   el.style.color = kind==="err"?"var(--red)":kind==="ok"?"var(--green)":kind==="wait"?"var(--amber)":"var(--faint)";
   el.textContent=msg; }
 
+function dayContext(){
+  // build a compact snapshot of today's numbers for the coach
+  try{
+    const p=profile(); const today=new Date().toISOString().slice(0,10);
+    const t=dayTotals(today);
+    const proTarget=Math.round((p.weight_kg||0)*(p.protein_per_kg||2));
+    const proEaten=Math.round(t.protein||0);
+    const foods=(t.foods||[]).map(f=>f.name).join(", ")||"nothing yet";
+    const trainedToday=entries().filter(e=>e.date===today).map(e=>e.kind==="cardio"?(e.activity||"cardio"):(e.type||"strength")).join(", ")||"no workout logged";
+    return `Maintenance ${Math.round(t.maint)} kcal, workout burn ${Math.round(t.workout)} kcal, total out ${Math.round(t.out)} kcal. `
+      +`Eaten ${Math.round(t.intake)} kcal so far (${t.net<0?Math.abs(Math.round(t.net))+' kcal under maintenance':Math.round(t.net)+' kcal over'}). `
+      +`Protein ${proEaten}g of ${proTarget}g target (${Math.max(0,proTarget-proEaten)}g to go). `
+      +`Today's food: ${foods}. Training today: ${trainedToday}. Goal: getting leaner while keeping muscle.`;
+  }catch(e){ return ""; }
+}
+
+function historyContext(){
+  // Compact, coach-useful summary of the full history (not raw sets) to keep tokens low.
+  try{
+    const all=entries();
+    const strength=all.filter(e=>e.kind==="strength");
+    const cardio=all.filter(e=>e.kind==="cardio");
+    if(!all.length) return "No training history yet.";
+    const firstDate=all[0].date, lastDate=all[all.length-1].date;
+
+    // PR / progression for the main compound lifts (by e1RM)
+    const keyLifts=["Bench Press","Squat","Deadlift","Incline Dumbbell Press","Seated Dumbbell Shoulder Press"];
+    const liftBits=[];
+    keyLifts.forEach(name=>{
+      const s=exerciseSeries(name,"e1rm");
+      if(s.length>=1){
+        const start=Math.round(s[0].value*10)/10, recent=Math.round(s[s.length-1].value*10)/10;
+        const best=Math.round(Math.max(...s.map(x=>x.value))*10)/10;
+        const delta=Math.round((recent-start)*10)/10;
+        liftBits.push(`${name}: e1RM ${start}→${recent}kg (${delta>=0?'+':''}${delta}, best ${best}, ${s.length} sessions)`);
+      }
+    });
+
+    // training frequency + split balance
+    const types={Push:0,Pull:0,Legs:0,Other:0};
+    strength.forEach(s=>{ types[s.type]=(types[s.type]||0)+1; });
+    const weeks=Math.max(1,(new Date(lastDate)-new Date(firstDate))/(86400000*7));
+    const perWeek=(strength.length/weeks).toFixed(1);
+
+    // weight trend
+    const w=(STORE.weights||[]).slice().sort((a,b)=>a.date<b.date?-1:1);
+    let weightBit="No weight logged.";
+    if(w.length>=1){
+      const latest=w[w.length-1].kg;
+      if(w.length>=3){
+        const avg=w.map((p,i)=>rollingAvg(w,i,7));
+        const lastAvg=avg[avg.length-1];
+        // rate vs ~7 days earlier
+        const lastDateW=new Date(w[w.length-1].date); let refIdx=0;
+        for(let i=0;i<w.length;i++){ if((lastDateW-new Date(w[i].date))/86400000<=7){ refIdx=i; break; } }
+        const days=Math.max(1,(lastDateW-new Date(w[refIdx].date))/86400000);
+        const rate=((avg[avg.length-1]-avg[refIdx])/days*7).toFixed(2);
+        weightBit=`Weight ${latest}kg, 7-day avg ${lastAvg.toFixed(1)}kg, trend ${rate}kg/week.`;
+      } else { weightBit=`Weight ${latest}kg (${w.length} weigh-in${w.length>1?'s':''} so far).`; }
+    }
+
+    // cardio recap
+    let cardioBit="No cardio logged.";
+    if(cardio.length){
+      const last=cardio[cardio.length-1];
+      const totDist=cardio.reduce((a,c)=>a+(c.distance_km||0),0).toFixed(1);
+      cardioBit=`${cardio.length} cardio sessions, ${totDist}km total. Last: ${last.activity} ${last.distance_km||''}km${last.pace_min_km?' @ '+Math.floor(last.pace_min_km)+':'+String(Math.round((last.pace_min_km%1)*60)).padStart(2,'0')+'/km':''}.`;
+    }
+
+    return `[History ${firstDate}–${lastDate}] ${strength.length} strength sessions (~${perWeek}/week; Push ${types.Push}/Pull ${types.Pull}/Legs ${types.Legs}). `
+      +`Main lifts — ${liftBits.join("; ")||"none with weights yet"}. `
+      +`${weightBit} ${cardioBit}`;
+  }catch(e){ return ""; }
+}
+
 async function qaSend(){
   const text=document.getElementById("qaText").value.trim();
   if(!text && !QA_IMAGE){ qaStatus("Type something or add a photo first.","err"); return; }
-  qaStatus("Reading…","wait");
+  qaStatus("Thinking…","wait");
   document.getElementById("qaConfirm").style.display="none";
   try{
     const res=await fetch("/api/parse",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({idToken:ID_TOKEN, text, image:QA_IMAGE, mediaType:QA_MEDIA})});
+      body:JSON.stringify({idToken:ID_TOKEN, text, image:QA_IMAGE, mediaType:QA_MEDIA, context:dayContext(), history:historyContext()})});
     const j=await res.json();
-    if(!j.ok){ qaStatus(j.error||"Couldn't parse that.","err"); return; }
-    showConfirm(j.result);
-    qaStatus("","");
+    if(!j.ok){ qaStatus(j.error||"Couldn't process that.","err"); return; }
+    const out=j.result||{};
+    // show coaching reply if present
+    if(out.reply && out.reply.trim()){
+      const rb=document.getElementById("qaConfirm");
+      rb.innerHTML=`<div style="font-size:13.5px; line-height:1.6; color:var(--ink)">${out.reply.replace(/</g,'&lt;')}</div>`;
+      rb.style.display="block";
+    }
+    // if there's something to log, show the confirm card (appended below any reply)
+    if(out.log){ showConfirm(out.log, !!(out.reply&&out.reply.trim())); }
+    qaStatus(out.log? "" : "","");
+    if(!out.log && (!out.reply||!out.reply.trim())) qaStatus("Not sure what you meant — try rephrasing.","err");
   }catch(e){ qaStatus("Couldn't reach the server.","err"); }
 }
 document.getElementById("qaSend").addEventListener("click",qaSend);
 document.getElementById("qaText").addEventListener("keydown",e=>{ if(e.key==="Enter") qaSend(); });
 
 // Show an editable confirmation before committing (estimates need a human glance)
-function showConfirm(r){
+function showConfirm(r, appendBelowReply){
   const box=document.getElementById("qaConfirm");
   const today=new Date().toISOString().slice(0,10);
+  // if a coaching reply is already shown, append the log card under it rather than replacing
+  const prefix = appendBelowReply ? box.innerHTML + '<div style="height:10px"></div>' : '';
   if(r.kind==="food" && r.items && r.items.length){
     const rows=r.items.map((it,i)=>`<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px">
       <input data-f="name" data-i="${i}" value="${(it.name||'').replace(/"/g,'&quot;')}" style="flex:1; background:var(--bg); border:1px solid var(--line); border-radius:6px; color:var(--ink); padding:6px 8px; font-size:13px">
       <input data-f="kcal" data-i="${i}" type="number" value="${it.kcal||0}" style="width:70px; background:var(--bg); border:1px solid var(--line); border-radius:6px; color:var(--ink); padding:6px; font-size:13px"> kcal
       <input data-f="p" data-i="${i}" type="number" value="${it.p||0}" style="width:54px; background:var(--bg); border:1px solid var(--line); border-radius:6px; color:var(--ink); padding:6px; font-size:13px">P
     </div>`).join("");
-    box.innerHTML=`<div style="font-weight:650; margin-bottom:8px">Food — adds to today (${today})</div>${rows}
+    box.innerHTML=prefix+`<div style="font-weight:650; margin-bottom:8px">Food — adds to today (${today})</div>${rows}
       <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px">
         <button class="ghost" id="qaCancel">Cancel</button><button class="primary" id="qaCommit">Add to log</button></div>
       <div class="hint" style="margin-top:6px">Estimates are approximate — tweak any number before adding.</div>`;
@@ -1085,7 +1171,7 @@ function showConfirm(r){
     };
   } else if(r.kind==="strength" && r.exercises && r.exercises.length){
     const summary=r.exercises.map(ex=>`${ex.name} — ${ex.sets.map(s=>`${s.reps}×${s.weight===0?'BW':s.weight}`).join(", ")}`).join("<br>");
-    box.innerHTML=`<div style="font-weight:650; margin-bottom:8px">${r.type||'Strength'} session — today (${today})</div>
+    box.innerHTML=prefix+`<div style="font-weight:650; margin-bottom:8px">${r.type||'Strength'} session — today (${today})</div>
       <div style="font-size:13px; color:var(--muted); line-height:1.7">${summary}</div>
       <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px">
         <button class="ghost" id="qaCancel">Cancel</button><button class="primary" id="qaCommit">Add session</button></div>`;
@@ -1097,7 +1183,7 @@ function showConfirm(r){
     };
   } else if(r.kind==="cardio"){
     const pace = (r.distance_km&&r.duration_min)? (r.duration_min/r.distance_km):null;
-    box.innerHTML=`<div style="font-weight:650; margin-bottom:8px">Cardio — today (${today})</div>
+    box.innerHTML=prefix+`<div style="font-weight:650; margin-bottom:8px">Cardio — today (${today})</div>
       <div style="font-size:13px; color:var(--muted)">${r.activity||'Cardio'} · ${r.distance_km?r.distance_km+' km':''} ${r.duration_min?'· '+r.duration_min+' min':''} ${r.calories?'· '+r.calories+' kcal':''}</div>
       <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px">
         <button class="ghost" id="qaCancel">Cancel</button><button class="primary" id="qaCommit">Add cardio</button></div>`;

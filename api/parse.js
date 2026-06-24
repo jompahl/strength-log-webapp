@@ -35,7 +35,8 @@ Return ONLY a JSON object, no markdown fences, no prose outside the JSON. Use th
 LOG object options (set "log" to one of these, or null if nothing to log):
 - Food: {"kind":"food","items":[{"name":"short name","kcal":<int>,"p":<int>,"c":<int>,"fat":<int>}]}
 - Strength: {"kind":"strength","type":"Push|Pull|Legs|Other","exercises":[{"name":"Name","sets":[{"reps":<int>,"weight":<kg, 0=bodyweight, negative=assisted>}]}]}
-- Cardio: {"kind":"cardio","activity":"Run|Walk|Cycle|Row|Swim","distance_km":<num|null>,"duration_min":<num|null>,"calories":<int|null>}
+- Cardio: {"kind":"cardio","activity":"Run|Walk|Cycle|Row|Swim|Hike|Badminton|Padel|Tennis|Soccer|Skipping|Basketball|<other>","distance_km":<num|null>,"duration_min":<num|null>,"calories":<int|null>}
+  For sports/activities without a meaningful distance (badminton, padel, soccer, skipping, etc.), set distance_km and pace to null and ESTIMATE calories from the activity + duration + the user's bodyweight if known. Capitalize the activity name.
 
 REPLY guidance:
 - Use the user's actual numbers from the context (protein gap, remaining calories, deficit) to give specific, actionable next steps.

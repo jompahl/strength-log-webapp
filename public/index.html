@@ -195,23 +195,6 @@
     </div>
   </div>
 
-  <div id="quickAdd" style="background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:18px">
-    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-      <input type="text" id="qaText" placeholder="Log food/workouts or ask for advice — e.g. 'what should I eat to hit my protein?'"
-        style="flex:1; min-width:200px; background:var(--panel2); border:1px solid var(--line); border-radius:9px; color:var(--ink); padding:11px 13px; font-size:14px">
-      <input type="file" id="qaPhoto" accept="image/*" style="display:none">
-      <button class="ghost" id="qaPhotoBtn" title="Add a food photo" style="padding:11px 13px">📷</button>
-      <button class="primary" id="qaSend" style="padding:11px 18px">Add</button>
-    </div>
-    <div id="qaPreviewWrap" style="display:none; margin-top:10px; align-items:center; gap:10px">
-      <img id="qaPreview" style="height:48px; border-radius:6px; border:1px solid var(--line)">
-      <span id="qaPhotoName" style="color:var(--muted); font-size:12px"></span>
-      <button class="xBtn" id="qaPhotoClear" style="font-size:15px">✕</button>
-    </div>
-    <div id="qaStatus" style="font-size:12.5px; color:var(--faint); margin-top:8px; min-height:16px"></div>
-    <div id="qaConfirm" style="display:none; margin-top:10px; background:var(--panel2); border:1px solid var(--line); border-radius:9px; padding:12px"></div>
-  </div>
-
   <div class="tabs">
     <button data-v="strength" class="on">Strength</button>
     <button data-v="cardio">Cardio</button>
@@ -258,6 +241,7 @@
   <div class="view" id="view-cardio">
     <div class="strip" id="cardioStrip"></div>
     <div class="controls">
+      <div class="selWrap" style="max-width:220px"><select id="cardioActSelect"></select></div>
       <div class="seg" id="cardioSeg">
         <button data-m="pace" class="on">Pace</button>
         <button data-m="distance">Distance</button>
@@ -400,6 +384,43 @@
 <datalist id="actNames"><option value="Run"><option value="Walk"><option value="Cycle"><option value="Row"><option value="Swim"></datalist>
 <div class="toast" id="toast"></div>
 
+<!-- Floating coach button -->
+<button id="coachFab" style="display:none; position:fixed; bottom:22px; right:22px; z-index:70;
+  width:58px; height:58px; border-radius:50%; border:none; cursor:pointer;
+  background:var(--amber); color:#1a1205; font-size:24px; box-shadow:0 6px 24px rgba(0,0,0,0.4);
+  transition:transform .15s">💬</button>
+
+<!-- Chat overlay -->
+<div id="coachOverlay" style="display:none; position:fixed; inset:0; z-index:80;
+  background:rgba(10,12,16,0.6); backdrop-filter:blur(7px); -webkit-backdrop-filter:blur(7px);
+  align-items:flex-end; justify-content:center;">
+  <div style="background:var(--panel); border:1px solid var(--line); border-radius:16px 16px 0 0;
+    width:100%; max-width:680px; height:86vh; display:flex; flex-direction:column; box-shadow:0 -10px 40px rgba(0,0,0,0.5)">
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid var(--line)">
+      <div style="display:flex; align-items:center; gap:10px">
+        <span style="width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 10px var(--amber)"></span>
+        <strong style="font-size:15px">Coach</strong>
+        <span style="color:var(--faint); font-size:12px">logs & advises with your data</span>
+      </div>
+      <button class="xBtn" id="coachClose" style="font-size:22px">✕</button>
+    </div>
+    <div id="chatThread" style="flex:1; overflow-y:auto; padding:18px; display:flex; flex-direction:column; gap:12px"></div>
+    <div id="chatPreviewWrap" style="display:none; align-items:center; gap:10px; padding:0 18px 8px">
+      <img id="chatPreview" style="height:42px; border-radius:6px; border:1px solid var(--line)">
+      <span id="chatPhotoName" style="color:var(--muted); font-size:12px"></span>
+      <button class="xBtn" id="chatPhotoClear" style="font-size:15px">✕</button>
+    </div>
+    <div style="display:flex; gap:8px; align-items:center; padding:14px 18px; border-top:1px solid var(--line)">
+      <input type="file" id="chatPhoto" accept="image/*" style="display:none">
+      <button class="ghost" id="chatPhotoBtn" title="Add a food photo" style="padding:11px 13px">📷</button>
+      <input type="text" id="chatText" placeholder="Log something or ask for advice…"
+        style="flex:1; background:var(--panel2); border:1px solid var(--line); border-radius:22px; color:var(--ink); padding:12px 16px; font-size:14px">
+      <button class="primary" id="chatSend" style="padding:11px 18px; border-radius:22px">Send</button>
+    </div>
+  </div>
+</div>
+
+
 <script>
 const DB = {"profile":{"weight_kg":96.6,"height_cm":190,"age":34,"sex":"male","activity":"sedentary","bmr":1988,"maintenance":2386,"deficit_target":400,"protein_per_kg":2.0},"entries":[{"kind":"strength","date":"2026-03-31","type":"Push","exercises":[{"name":"Bench Press","muscle":"Chest","sets":[{"reps":10,"weight":20},{"reps":5,"weight":60},{"reps":3,"weight":70},{"reps":1,"weight":80},{"reps":5,"weight":82.5},{"reps":5,"weight":82.5},{"reps":5,"weight":82.5},{"reps":5,"weight":82.5}]},{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":7,"weight":30},{"reps":6,"weight":30},{"reps":6,"weight":30}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":10,"weight":8},{"reps":10,"weight":8},{"reps":10,"weight":8}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":10,"weight":28.8},{"reps":10,"weight":28.8},{"reps":8,"weight":28.8}]},{"name":"Overhead Press","muscle":"Shoulders","sets":[{"reps":8,"weight":35},{"reps":7,"weight":35},{"reps":7,"weight":30}]},{"name":"Cable Chest Press","muscle":"Chest","sets":[{"reps":10,"weight":16.3},{"reps":8,"weight":18.8},{"reps":8,"weight":18.8}]}]},{"kind":"strength","date":"2026-04-09","type":"Pull","exercises":[{"name":"Machine Lat Pulldown","muscle":"Back","sets":[{"reps":10,"weight":40},{"reps":10,"weight":60},{"reps":12,"weight":90},{"reps":12,"weight":90},{"reps":12,"weight":90},{"reps":12,"weight":100}]},{"name":"Seated Machine Row","muscle":"Back","sets":[{"reps":10,"weight":50},{"reps":10,"weight":45},{"reps":10,"weight":45}]},{"name":"Pullover","muscle":"Back","sets":[{"reps":10,"weight":20},{"reps":10,"weight":20},{"reps":10,"weight":20}]},{"name":"Dumbbell Curl","muscle":"Biceps","sets":[{"reps":10,"weight":14},{"reps":10,"weight":14},{"reps":10,"weight":14}]},{"name":"Reverse Dumbbell Flyes","muscle":"Shoulders","sets":[{"reps":10,"weight":7},{"reps":10,"weight":7},{"reps":10,"weight":7}]},{"name":"Cable Curl With Rope","muscle":"Biceps","sets":[{"reps":12,"weight":20},{"reps":12,"weight":20},{"reps":10,"weight":20}]},{"name":"Assisted Pull-Up","muscle":"Back","sets":[{"reps":8,"weight":-70},{"reps":8,"weight":-70},{"reps":5,"weight":-70}]}]},{"kind":"strength","date":"2026-04-20","type":"Push","exercises":[{"name":"Dumbbell Chest Press","muscle":"Chest","sets":[{"reps":12,"weight":28},{"reps":12,"weight":28},{"reps":10,"weight":28},{"reps":4,"weight":28}]},{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":8,"weight":24},{"reps":8,"weight":22},{"reps":8,"weight":22}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":12,"weight":6},{"reps":12,"weight":6},{"reps":12,"weight":6}]},{"name":"Bulgarian Split Squat","muscle":"Legs","sets":[{"reps":6,"weight":0},{"reps":6,"weight":0},{"reps":6,"weight":0}]},{"name":"Machine Chest Press","muscle":"Chest","sets":[{"reps":10,"weight":50},{"reps":8,"weight":46},{"reps":7,"weight":41}]}]},{"kind":"strength","date":"2026-04-23","type":"Legs","exercises":[{"name":"Leg Extension","muscle":"Legs","sets":[{"reps":15,"weight":65},{"reps":15,"weight":65},{"reps":15,"weight":70}]},{"name":"Lying Leg Curl","muscle":"Legs","sets":[{"reps":15,"weight":20},{"reps":15,"weight":20},{"reps":15,"weight":30}]},{"name":"Assisted Pull-Up","muscle":"Back","sets":[{"reps":10,"weight":-70},{"reps":5,"weight":-50},{"reps":6,"weight":-60}]},{"name":"Leg Press","muscle":"Legs","sets":[{"reps":15,"weight":60},{"reps":15,"weight":100},{"reps":15,"weight":100},{"reps":15,"weight":100}]},{"name":"Standing Calf Raise","muscle":"Legs","sets":[{"reps":20,"weight":0},{"reps":40,"weight":0},{"reps":40,"weight":0},{"reps":40,"weight":0}]},{"name":"Hip Thrust","muscle":"Legs","sets":[{"reps":10,"weight":60},{"reps":10,"weight":60},{"reps":10,"weight":60}]},{"name":"Bulgarian Split Squat","muscle":"Legs","sets":[{"reps":8,"weight":14},{"reps":8,"weight":14},{"reps":8,"weight":14}]},{"name":"Squat","muscle":"Legs","sets":[{"reps":15,"weight":0},{"reps":15,"weight":0},{"reps":15,"weight":0}]}]},{"kind":"strength","date":"2026-04-30","type":"Push","exercises":[{"name":"Dumbbell Chest Press","muscle":"Chest","sets":[{"reps":10,"weight":32},{"reps":10,"weight":32},{"reps":8,"weight":32},{"reps":6,"weight":32}]},{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":8,"weight":25},{"reps":8,"weight":25},{"reps":8,"weight":25}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":10,"weight":8},{"reps":10,"weight":8},{"reps":10,"weight":7}]},{"name":"Cable Incline Chest Fly","muscle":"Chest","sets":[{"reps":10,"weight":11.3},{"reps":10,"weight":11.3},{"reps":10,"weight":11.3}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":10,"weight":28.8},{"reps":10,"weight":28.8},{"reps":8,"weight":28.8}]}]},{"kind":"strength","date":"2026-05-04","type":"Pull","exercises":[{"name":"Seated Machine Row","muscle":"Back","sets":[{"reps":10,"weight":20},{"reps":10,"weight":45},{"reps":10,"weight":45},{"reps":10,"weight":45}]},{"name":"Machine Lat Pulldown","muscle":"Back","sets":[{"reps":10,"weight":45.4},{"reps":10,"weight":49.9},{"reps":10,"weight":49.9}]},{"name":"Pullover","muscle":"Back","sets":[{"reps":10,"weight":20},{"reps":10,"weight":20},{"reps":10,"weight":20}]},{"name":"Dumbbell Curl","muscle":"Biceps","sets":[{"reps":10,"weight":14},{"reps":10,"weight":14},{"reps":10,"weight":14}]},{"name":"Face Pull","muscle":"Shoulders","sets":[{"reps":12,"weight":15},{"reps":12,"weight":15},{"reps":12,"weight":15}]}]},{"kind":"strength","date":"2026-05-07","type":"Push","exercises":[{"name":"Dumbbell Chest Press","muscle":"Chest","sets":[{"reps":10,"weight":32},{"reps":10,"weight":32},{"reps":7,"weight":32}]},{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":7,"weight":26},{"reps":7,"weight":24},{"reps":7,"weight":24}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":10,"weight":8},{"reps":10,"weight":8},{"reps":10,"weight":8}]},{"name":"Machine Chest Fly","muscle":"Chest","sets":[{"reps":9,"weight":61},{"reps":8,"weight":61},{"reps":7,"weight":61}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":10,"weight":27},{"reps":9,"weight":27},{"reps":6,"weight":27}]},{"name":"Push-Up","muscle":"Chest","sets":[{"reps":12,"weight":0},{"reps":12,"weight":0},{"reps":12,"weight":0}]},{"name":"Seated Calf Raise","muscle":"Legs","sets":[{"reps":20,"weight":40},{"reps":20,"weight":40},{"reps":20,"weight":40}]}]},{"kind":"strength","date":"2026-05-09","type":"Legs","exercises":[{"name":"Leg Extension","muscle":"Legs","sets":[{"reps":15,"weight":70},{"reps":15,"weight":70},{"reps":15,"weight":70}]},{"name":"Lying Leg Curl","muscle":"Legs","sets":[{"reps":15,"weight":50},{"reps":12,"weight":70},{"reps":12,"weight":70}]},{"name":"Leg Press","muscle":"Legs","sets":[{"reps":15,"weight":120},{"reps":15,"weight":120},{"reps":15,"weight":120},{"reps":15,"weight":120}]},{"name":"Hip Thrust","muscle":"Legs","sets":[{"reps":10,"weight":70},{"reps":10,"weight":70},{"reps":10,"weight":70}]},{"name":"Bulgarian Split Squat","muscle":"Legs","sets":[{"reps":8,"weight":18},{"reps":8,"weight":18},{"reps":8,"weight":18}]},{"name":"Squat","muscle":"Legs","sets":[{"reps":15,"weight":0},{"reps":15,"weight":0},{"reps":15,"weight":0}]}]},{"kind":"strength","date":"2026-05-11","type":"Push","exercises":[{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":10,"weight":32},{"reps":10,"weight":32},{"reps":7,"weight":32}]},{"name":"Dumbbell Chest Press","muscle":"Chest","sets":[{"reps":8,"weight":26},{"reps":8,"weight":26},{"reps":8,"weight":26}]},{"name":"Seated Dumbbell Shoulder Press","muscle":"Shoulders","sets":[{"reps":8,"weight":22},{"reps":8,"weight":20},{"reps":7,"weight":20}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":11,"weight":8},{"reps":10,"weight":8},{"reps":10,"weight":8}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":10,"weight":27.5},{"reps":10,"weight":27.5},{"reps":10,"weight":27.5}]},{"name":"Machine Chest Fly","muscle":"Chest","sets":[{"reps":10,"weight":61},{"reps":10,"weight":61},{"reps":7,"weight":61}]},{"name":"Push-Up","muscle":"Chest","sets":[{"reps":15,"weight":0},{"reps":10,"weight":0}]}]},{"kind":"strength","date":"2026-05-12","type":"Pull","exercises":[{"name":"Assisted Pull-Up","muscle":"Back","sets":[{"reps":7,"weight":-40},{"reps":6,"weight":-40},{"reps":6,"weight":-50},{"reps":5,"weight":-50},{"reps":5,"weight":-70}]},{"name":"Cable Wide Grip Seated Row","muscle":"Back","sets":[{"reps":12,"weight":48.8},{"reps":12,"weight":48.8},{"reps":12,"weight":48.8}]},{"name":"Pullover","muscle":"Back","sets":[{"reps":12,"weight":20},{"reps":12,"weight":20},{"reps":12,"weight":20}]},{"name":"Dumbbell Curl","muscle":"Biceps","sets":[{"reps":10,"weight":15},{"reps":10,"weight":15},{"reps":10,"weight":15}]},{"name":"Face Pull","muscle":"Shoulders","sets":[{"reps":12,"weight":16.3},{"reps":12,"weight":16.3},{"reps":12,"weight":16.3}]},{"name":"Machine Bicep Curl","muscle":"Biceps","sets":[{"reps":12,"weight":null},{"reps":12,"weight":null},{"reps":10,"weight":null}]}]},{"kind":"strength","date":"2026-05-18","type":"Pull","exercises":[{"name":"Machine Lat Pulldown","muscle":"Back","sets":[{"reps":10,"weight":36.3},{"reps":10,"weight":63.5},{"reps":10,"weight":72.6},{"reps":10,"weight":68}]},{"name":"Seated Machine Row","muscle":"Back","sets":[{"reps":10,"weight":45},{"reps":10,"weight":45},{"reps":10,"weight":45}]},{"name":"Dumbbell Curl","muscle":"Biceps","sets":[{"reps":11,"weight":14},{"reps":11,"weight":14},{"reps":11,"weight":14}]},{"name":"Straight Arm Lat Pulldown","muscle":"Back","sets":[{"reps":8,"weight":25},{"reps":12,"weight":20},{"reps":12,"weight":20}]},{"name":"Face Pull","muscle":"Shoulders","sets":[{"reps":12,"weight":15},{"reps":12,"weight":15},{"reps":12,"weight":15}]},{"name":"Machine Bicep Curl","muscle":"Biceps","sets":[{"reps":12,"weight":30},{"reps":11,"weight":30},{"reps":10,"weight":30}]},{"name":"Assisted Pull-Up","muscle":"Back","sets":[{"reps":4,"weight":-50},{"reps":4,"weight":-60},{"reps":4,"weight":-70}]}]},{"kind":"strength","date":"2026-05-19","type":"Push","exercises":[{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":10,"weight":32},{"reps":10,"weight":32},{"reps":8,"weight":32}]},{"name":"Dumbbell Chest Press","muscle":"Chest","sets":[{"reps":8,"weight":28},{"reps":8,"weight":28},{"reps":8,"weight":28}]},{"name":"Seated Dumbbell Shoulder Press","muscle":"Shoulders","sets":[{"reps":7,"weight":20},{"reps":7,"weight":20},{"reps":6,"weight":20}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":11,"weight":8},{"reps":10,"weight":8},{"reps":10,"weight":8}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":10,"weight":27},{"reps":9,"weight":27},{"reps":7,"weight":27}]},{"name":"Machine Chest Fly","muscle":"Chest","sets":[{"reps":12,"weight":54},{"reps":12,"weight":54},{"reps":11,"weight":54}]},{"name":"Push-Up","muscle":"Chest","sets":[{"reps":15,"weight":0},{"reps":10,"weight":0}]}]},{"kind":"strength","date":"2026-05-21","type":"Legs","exercises":[{"name":"Squat","muscle":"Legs","sets":[{"reps":10,"weight":20},{"reps":5,"weight":60},{"reps":3,"weight":90},{"reps":6,"weight":110},{"reps":6,"weight":90},{"reps":6,"weight":90}]},{"name":"Romanian Deadlift","muscle":"Legs","sets":[{"reps":8,"weight":70},{"reps":10,"weight":70},{"reps":10,"weight":70}]},{"name":"Leg Extension","muscle":"Legs","sets":[{"reps":15,"weight":null},{"reps":20,"weight":null},{"reps":20,"weight":null}]},{"name":"Seated Leg Curl","muscle":"Legs","sets":[{"reps":15,"weight":null},{"reps":20,"weight":null},{"reps":20,"weight":null}]},{"name":"Bulgarian Split Squat","muscle":"Legs","sets":[{"reps":8,"weight":17.5},{"reps":8,"weight":17.5},{"reps":8,"weight":17.5}]}]},{"kind":"strength","date":"2026-05-26","type":"Push","exercises":[{"name":"Bench Press","muscle":"Chest","sets":[{"reps":10,"weight":20},{"reps":5,"weight":60},{"reps":3,"weight":70},{"reps":1,"weight":80},{"reps":5,"weight":85},{"reps":5,"weight":85},{"reps":5,"weight":85},{"reps":5,"weight":85}]},{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":8,"weight":32},{"reps":8,"weight":32},{"reps":8,"weight":32}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":10,"weight":9},{"reps":10,"weight":9},{"reps":10,"weight":9}]},{"name":"Seated Dumbbell Shoulder Press","muscle":"Shoulders","sets":[{"reps":7,"weight":20},{"reps":7,"weight":20},{"reps":7,"weight":20}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":8,"weight":31.3},{"reps":8,"weight":31.3},{"reps":8,"weight":31.3}]},{"name":"Machine Chest Press","muscle":"Chest","sets":[{"reps":12,"weight":null},{"reps":12,"weight":null},{"reps":15,"weight":null}]}]},{"kind":"strength","date":"2026-05-28","type":"Pull","exercises":[{"name":"Pullover","muscle":"Back","sets":[{"reps":10,"weight":22.5},{"reps":10,"weight":22.5},{"reps":10,"weight":22.5}]},{"name":"Dumbbell Curl","muscle":"Biceps","sets":[{"reps":6,"weight":17.5},{"reps":7,"weight":17.5},{"reps":7,"weight":17.5}]},{"name":"Pull-Up","muscle":"Back","sets":[{"reps":6,"weight":-30},{"reps":6,"weight":-30},{"reps":6,"weight":-30},{"reps":5,"weight":-30},{"reps":5,"weight":-30}]},{"name":"Cable Wide Grip Seated Row","muscle":"Back","sets":[{"reps":10,"weight":48.8},{"reps":10,"weight":48.8},{"reps":10,"weight":48.8}]},{"name":"Face Pull","muscle":"Shoulders","sets":[{"reps":10,"weight":21.3},{"reps":10,"weight":21.3},{"reps":10,"weight":21.3}]},{"name":"Machine Lat Pulldown","muscle":"Back","sets":[{"reps":10,"weight":null},{"reps":10,"weight":null},{"reps":10,"weight":null}]}]},{"kind":"strength","date":"2026-06-02","type":"Push","exercises":[{"name":"Bench Press","muscle":"Chest","sets":[{"reps":10,"weight":20},{"reps":5,"weight":60},{"reps":3,"weight":70},{"reps":1,"weight":80},{"reps":5,"weight":87.5},{"reps":5,"weight":87.5},{"reps":5,"weight":87.5},{"reps":5,"weight":85}]},{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":8,"weight":32},{"reps":7,"weight":32},{"reps":6,"weight":32}]},{"name":"Seated Dumbbell Shoulder Press","muscle":"Shoulders","sets":[{"reps":8,"weight":20},{"reps":8,"weight":20},{"reps":8,"weight":20}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":10,"weight":9},{"reps":10,"weight":9},{"reps":10,"weight":9}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":8,"weight":31.3},{"reps":8,"weight":31.3},{"reps":8,"weight":31.3}]},{"name":"Cable Chest Press","muscle":"Chest","sets":[{"reps":10,"weight":18.8},{"reps":10,"weight":18.8},{"reps":10,"weight":18.8}]},{"name":"Overhead Cable Triceps Extension","muscle":"Triceps","sets":[{"reps":10,"weight":18.8},{"reps":8,"weight":23.8},{"reps":7,"weight":23.8}]}]},{"kind":"strength","date":"2026-06-06","type":"Pull","exercises":[{"name":"Assisted Pull-Up","muscle":"Back","sets":[{"reps":6,"weight":-40},{"reps":5,"weight":-40},{"reps":5,"weight":-40},{"reps":4,"weight":-40},{"reps":3,"weight":-40}]},{"name":"Machine Lat Pulldown","muscle":"Back","sets":[{"reps":8,"weight":68},{"reps":8,"weight":68},{"reps":8,"weight":68}]},{"name":"Seated Machine Row","muscle":"Back","sets":[{"reps":8,"weight":45},{"reps":8,"weight":45},{"reps":8,"weight":45}]},{"name":"Straight Arm Lat Pulldown","muscle":"Back","sets":[{"reps":8,"weight":36},{"reps":8,"weight":36},{"reps":8,"weight":36}]},{"name":"Dumbbell Curl","muscle":"Biceps","sets":[{"reps":7,"weight":18},{"reps":7,"weight":18},{"reps":7,"weight":18}]},{"name":"Barbell Preacher Curl","muscle":"Biceps","sets":[{"reps":10,"weight":20},{"reps":7,"weight":30},{"reps":7,"weight":30},{"reps":5,"weight":30}]},{"name":"Face Pull","muscle":"Shoulders","sets":[{"reps":12,"weight":15},{"reps":12,"weight":15},{"reps":12,"weight":15},{"reps":12,"weight":15}]}]},{"kind":"strength","date":"2026-06-09","type":"Push","exercises":[{"name":"Bench Press","muscle":"Chest","sets":[{"reps":10,"weight":20},{"reps":5,"weight":60},{"reps":3,"weight":70},{"reps":1,"weight":80},{"reps":5,"weight":87.5},{"reps":5,"weight":87.5},{"reps":5,"weight":87.5},{"reps":5,"weight":87.5}]},{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":8,"weight":32},{"reps":8,"weight":32},{"reps":8,"weight":32}]},{"name":"Seated Dumbbell Shoulder Press","muscle":"Shoulders","sets":[{"reps":8,"weight":22.5},{"reps":8,"weight":22.5},{"reps":8,"weight":22.5}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":11,"weight":9},{"reps":10,"weight":9},{"reps":10,"weight":9}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":10,"weight":31.3},{"reps":10,"weight":31.3},{"reps":9,"weight":31.3}]},{"name":"Cable Chest Press","muscle":"Chest","sets":[{"reps":11,"weight":18.8},{"reps":11,"weight":18.8},{"reps":10,"weight":18.8}]},{"name":"Overhead Cable Triceps Extension","muscle":"Triceps","sets":[{"reps":8,"weight":23.8},{"reps":8,"weight":23.8},{"reps":8,"weight":23.8}]}]},{"kind":"strength","date":"2026-06-11","type":"Pull","exercises":[{"name":"Assisted Pull-Up","muscle":"Back","sets":[{"reps":5,"weight":-30},{"reps":4,"weight":-30},{"reps":3,"weight":-30},{"reps":3,"weight":-30},{"reps":3,"weight":-30},{"reps":2,"weight":-30},{"reps":1,"weight":-30}]},{"name":"Cable Wide Grip Seated Row","muscle":"Back","sets":[{"reps":12,"weight":48.8},{"reps":12,"weight":48.8},{"reps":12,"weight":48.8}]},{"name":"Straight Arm Lat Pulldown","muscle":"Back","sets":[{"reps":10,"weight":23.8},{"reps":8,"weight":28.8},{"reps":7,"weight":28.8}]},{"name":"Dumbbell Curl","muscle":"Biceps","sets":[{"reps":6,"weight":20},{"reps":6,"weight":20},{"reps":6,"weight":20}]},{"name":"Machine Lat Pulldown","muscle":"Back","sets":[{"reps":10,"weight":null},{"reps":10,"weight":null},{"reps":10,"weight":null}]},{"name":"Face Pull","muscle":"Shoulders","sets":[{"reps":15,"weight":13.8},{"reps":12,"weight":16.3},{"reps":12,"weight":16.3},{"reps":12,"weight":16.3}]},{"name":"Decline Bench Sit-Up","muscle":"Core","sets":[{"reps":30,"weight":0},{"reps":30,"weight":0},{"reps":30,"weight":0}]},{"name":"Machine Bicep Curl","muscle":"Biceps","sets":[{"reps":15,"weight":null},{"reps":14,"weight":null},{"reps":13,"weight":null}]}]},{"kind":"strength","date":"2026-06-16","type":"Push","exercises":[{"name":"Bench Press","muscle":"Chest","sets":[{"reps":10,"weight":20},{"reps":5,"weight":60},{"reps":3,"weight":70},{"reps":1,"weight":80},{"reps":4,"weight":90},{"reps":4,"weight":90},{"reps":4,"weight":90},{"reps":4,"weight":90}]},{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":7,"weight":34},{"reps":7,"weight":34},{"reps":6,"weight":34}]},{"name":"Seated Dumbbell Shoulder Press","muscle":"Shoulders","sets":[{"reps":7,"weight":25},{"reps":7,"weight":25},{"reps":6,"weight":25}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":11,"weight":9},{"reps":11,"weight":9},{"reps":10,"weight":9}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":10,"weight":31.3},{"reps":10,"weight":31.3},{"reps":9,"weight":31.3}]},{"name":"Cable Chest Press","muscle":"Chest","sets":[{"reps":10,"weight":21.3},{"reps":10,"weight":21.3},{"reps":8,"weight":21.3}]},{"name":"Overhead Cable Triceps Extension","muscle":"Triceps","sets":[{"reps":9,"weight":23.8},{"reps":8,"weight":23.8},{"reps":8,"weight":23.8}]}]},{"kind":"strength","date":"2026-06-17","type":"Legs","exercises":[{"name":"Squat","muscle":"Legs","sets":[{"reps":10,"weight":20},{"reps":5,"weight":60},{"reps":6,"weight":90},{"reps":6,"weight":90},{"reps":6,"weight":90},{"reps":6,"weight":90}]},{"name":"Deadlift","muscle":"Legs","sets":[{"reps":6,"weight":110},{"reps":6,"weight":110},{"reps":6,"weight":110},{"reps":5,"weight":110}]},{"name":"Lying Leg Curl","muscle":"Legs","sets":[{"reps":12,"weight":75},{"reps":11,"weight":75},{"reps":9,"weight":75}]},{"name":"Leg Extension","muscle":"Legs","sets":[{"reps":12,"weight":80},{"reps":12,"weight":80},{"reps":12,"weight":80}]},{"name":"Bulgarian Split Squat","muscle":"Legs","sets":[{"reps":8,"weight":20},{"reps":8,"weight":20},{"reps":8,"weight":20}]},{"name":"Seated Calf Raise","muscle":"Legs","sets":[{"reps":15,"weight":50},{"reps":15,"weight":50},{"reps":15,"weight":50}]}]},{"kind":"strength","date":"2026-06-18","type":"Pull","exercises":[{"name":"Assisted Pull-Up","muscle":"Back","sets":[{"reps":5,"weight":-16},{"reps":4,"weight":-16},{"reps":4,"weight":-16},{"reps":3,"weight":-16},{"reps":3,"weight":-16}]},{"name":"Machine Lat Pulldown","muscle":"Back","sets":[{"reps":12,"weight":null},{"reps":12,"weight":null},{"reps":12,"weight":null}]},{"name":"Dumbbell Row","muscle":"Back","sets":[{"reps":6,"weight":34},{"reps":8,"weight":30},{"reps":8,"weight":30}]},{"name":"Pullover","muscle":"Back","sets":[{"reps":8,"weight":25},{"reps":8,"weight":25},{"reps":8,"weight":25}]},{"name":"Dumbbell Curl","muscle":"Biceps","sets":[{"reps":6,"weight":20},{"reps":6,"weight":20},{"reps":6,"weight":20}]},{"name":"Face Pull","muscle":"Shoulders","sets":[{"reps":12,"weight":16.3},{"reps":12,"weight":18.8},{"reps":12,"weight":18.8}]},{"name":"Decline Bench Sit-Up","muscle":"Core","sets":[{"reps":30,"weight":0},{"reps":30,"weight":0},{"reps":30,"weight":0}]},{"name":"Machine Bicep Curl","muscle":"Biceps","sets":[{"reps":15,"weight":null},{"reps":14,"weight":null},{"reps":13,"weight":null}]}]},{"kind":"strength","date":"2026-06-23","type":"Push","exercises":[{"name":"Bench Press","muscle":"Chest","sets":[{"reps":10,"weight":20},{"reps":5,"weight":60},{"reps":3,"weight":70},{"reps":1,"weight":80},{"reps":5,"weight":90},{"reps":5,"weight":90},{"reps":5,"weight":90},{"reps":5,"weight":90}]},{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":8,"weight":34},{"reps":7,"weight":34},{"reps":6,"weight":34}]},{"name":"Seated Dumbbell Shoulder Press","muscle":"Shoulders","sets":[{"reps":8,"weight":25},{"reps":7,"weight":25},{"reps":7,"weight":25}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":11,"weight":9},{"reps":11,"weight":9},{"reps":10,"weight":9}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":10,"weight":31.3},{"reps":10,"weight":31.3},{"reps":9,"weight":31.3}]},{"name":"Cable Chest Press","muscle":"Chest","sets":[{"reps":10,"weight":21.3},{"reps":10,"weight":21.3},{"reps":9,"weight":21.3}]},{"name":"Overhead Cable Triceps Extension","muscle":"Triceps","sets":[{"reps":9,"weight":23.8},{"reps":9,"weight":23.8},{"reps":9,"weight":23.8}]},{"name":"Push-Up","muscle":"Chest","sets":[{"reps":10,"weight":0},{"reps":10,"weight":0}]}]},{"kind":"cardio","date":"2026-06-24","activity":"Run","distance_km":8.01,"duration_min":36.67,"pace_min_km":4.583,"calories":818,"note":"Ribersborg, Malm\u00f6"}],"food":[{"_id":"seed_bf_0624","date":"2026-06-24","name":"2 buns w/ cheese + egg","kcal":480,"p":24,"c":50,"fat":21},{"_id":"seed_lu_0624","date":"2026-06-24","name":"Pepper steak (300g) + rice","kcal":1000,"p":70,"c":75,"fat":42},{"_id":"seed_di_0624","date":"2026-06-24","name":"Chicken salad bowl","kcal":400,"p":35,"c":20,"fat":18}]};
 const MUSCLE = {
@@ -528,12 +549,15 @@ function handleCredential(resp){
 function showApp(){
   document.getElementById("signinOverlay").style.display="none";
   document.getElementById("appWrap").style.display="block";
+  document.getElementById("coachFab").style.display="block";
   const b=document.getElementById("acctBtn");
   if(b&&CURRENT_USER) b.textContent=(CURRENT_USER.name||"Account").split(" ")[0];
 }
 function requireSignIn(){
   ID_TOKEN=null; CURRENT_USER=null; sessionStorage.removeItem("idtoken");
   document.getElementById("appWrap").style.display="none";
+  document.getElementById("coachFab").style.display="none";
+  document.getElementById("coachOverlay").style.display="none";
   document.getElementById("signinOverlay").style.display="flex";
 }
 function initGoogle(){
@@ -677,31 +701,63 @@ function buildPR(){
 }
 
 /* ===================== CARDIO ===================== */
-let CARDIO_METRIC="pace", cardioChart=null;
+let CARDIO_METRIC="pace", cardioChart=null, CARDIO_ACT=null;
+// activities that track distance/pace; everything else is calorie-only
+const DISTANCE_ACTIVITIES=["Run","Walk","Cycle","Row","Swim","Hike"];
+function isDistanceActivity(name){ return DISTANCE_ACTIVITIES.some(a=> (name||"").toLowerCase().startsWith(a.toLowerCase())); }
+
 function buildCardio(){
-  const ce=cardioEntries();
+  const all=cardioEntries();
+  // populate activity selector from logged activities
+  const acts=[...new Set(all.map(c=>c.activity||"Cardio"))];
+  if(!acts.length) acts.push("Run");
+  // default selection: Run if present, else first
+  if(!CARDIO_ACT || !acts.includes(CARDIO_ACT)) CARDIO_ACT = acts.includes("Run")?"Run":acts[0];
+  const sel=document.getElementById("cardioActSelect");
+  sel.innerHTML=acts.map(a=>`<option value="${a.replace(/"/g,'&quot;')}">${a}</option>`).join("");
+  sel.value=CARDIO_ACT;
+
+  const ce=all.filter(c=>(c.activity||"Cardio")===CARDIO_ACT);
+  const distbased=isDistanceActivity(CARDIO_ACT);
+
+  // show/hide metric buttons based on activity type; calorie-only forces "calories"
+  document.querySelectorAll("#cardioSeg button").forEach(b=>{
+    const m=b.dataset.m;
+    b.style.display = (!distbased && (m==="pace"||m==="distance")) ? "none" : "";
+  });
+  if(!distbased){
+    CARDIO_METRIC="calories";
+    document.querySelectorAll("#cardioSeg button").forEach(x=>x.classList.toggle("on",x.dataset.m==="calories"));
+  }
+
   let totDist=0,totTime=0,totCal=0; ce.forEach(c=>{ totDist+=c.distance_km||0; totTime+=c.duration_min||0; totCal+=c.calories||0; });
-  const bestPace=ce.length?Math.min(...ce.map(c=>c.pace_min_km||999)):0;
-  document.getElementById("cardioStrip").innerHTML=`
+  const bestPace=ce.filter(c=>c.pace_min_km).length?Math.min(...ce.filter(c=>c.pace_min_km).map(c=>c.pace_min_km)):0;
+  document.getElementById("cardioStrip").innerHTML = distbased ? `
     <div class="stat"><div class="k">Sessions</div><div class="v mono">${ce.length}</div></div>
     <div class="stat"><div class="k">Total distance</div><div class="v mono">${totDist.toFixed(1)}<small> km</small></div></div>
-    <div class="stat"><div class="k">Best pace</div><div class="v mono">${ce.length?pace(bestPace):"—"}<small> /km</small></div></div>
-    <div class="stat"><div class="k">Calories burned</div><div class="v mono">${fmt0(totCal)}</div></div>`;
+    <div class="stat"><div class="k">Best pace</div><div class="v mono">${bestPace?pace(bestPace):"—"}<small> /km</small></div></div>
+    <div class="stat"><div class="k">Calories</div><div class="v mono">${fmt0(totCal)}</div></div>` : `
+    <div class="stat"><div class="k">Sessions</div><div class="v mono">${ce.length}</div></div>
+    <div class="stat"><div class="k">Total time</div><div class="v mono">${Math.round(totTime)}<small> min</small></div></div>
+    <div class="stat"><div class="k">Calories</div><div class="v mono">${fmt0(totCal)}</div></div>
+    <div class="stat"><div class="k">Avg / session</div><div class="v mono">${ce.length?fmt0(totCal/ce.length):0}<small> kcal</small></div></div>`;
+
   const series=ce.map(c=>({date:c.date, pace:c.pace_min_km, distance:c.distance_km, calories:c.calories}));
-  const vals=series.map(p=>p[CARDIO_METRIC]); const labels=series.map(p=>fmtDate(p.date));
+  const metric = distbased ? CARDIO_METRIC : "calories";
+  const vals=series.map(p=>p[metric]); const labels=series.map(p=>fmtDate(p.date));
   const ctx=document.getElementById("cardioChart"); if(cardioChart) cardioChart.destroy();
   const grad=ctx.getContext("2d").createLinearGradient(0,0,0,300); grad.addColorStop(0,"rgba(91,155,213,0.22)"); grad.addColorStop(1,"rgba(91,155,213,0.01)");
-  const invert = CARDIO_METRIC==="pace"; // lower pace is better
   cardioChart=new Chart(ctx,{type:series.length===1?"bar":"line",data:{labels,datasets:[{data:vals,borderColor:"#5b9bd5",backgroundColor:series.length===1?"#5b9bd5":grad,fill:true,borderWidth:2.5,tension:0.28,pointRadius:4,pointBackgroundColor:"#5b9bd5",borderRadius:6,maxBarThickness:60}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:"#0e1116",borderColor:"#2c323d",borderWidth:1,titleColor:"#e8eaed",bodyColor:"#5b9bd5",padding:11,displayColors:false,
-      callbacks:{title:(it)=>series[it[0].dataIndex].date,label:(it)=> CARDIO_METRIC==="pace"?pace(it.raw)+" /km":CARDIO_METRIC==="distance"?it.raw+" km":fmt0(it.raw)+" kcal"}}},
+      callbacks:{title:(it)=>series[it[0].dataIndex].date,label:(it)=> metric==="pace"?pace(it.raw)+" /km":metric==="distance"?it.raw+" km":fmt0(it.raw)+" kcal"}}},
       scales:{x:{grid:{color:"rgba(44,50,61,0.5)"},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10.5},maxRotation:0}},
-        y:{reverse:invert,grid:{color:"rgba(44,50,61,0.5)"},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10.5},callback:v=>CARDIO_METRIC==="pace"?pace(v):v}}}}});
-  document.getElementById("cardioNote").textContent = CARDIO_METRIC==="pace"?"Pace per km — lower is faster, so down = improving (axis flipped so up = faster).":CARDIO_METRIC==="distance"?"Distance per session.":"Calories burned per session.";
+        y:{grid:{color:"rgba(44,50,61,0.5)"},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10.5},callback:v=>metric==="pace"?pace(v):v}}}}});
+  document.getElementById("cardioNote").textContent = metric==="pace"?"Pace per km (lower is faster — a downward line means you're getting quicker).":metric==="distance"?"Distance per session.":"Calories burned per session.";
+
   // table
   let html=`<tr><th>Date</th><th>Activity</th><th class="r">Dist</th><th class="r">Time</th><th class="r">Pace</th><th class="r">kcal</th></tr>`;
   ce.slice().reverse().forEach(c=>{ html+=`<tr><td class="mono" style="white-space:nowrap">${c.date}</td><td>${c.activity}${c.note?`<div style="color:var(--faint);font-size:11px">${c.note}</div>`:""}</td>
-    <td class="r mono">${c.distance_km?c.distance_km.toFixed(2):"—"}</td><td class="r mono">${c.duration_min?pace(c.duration_min):"—"}</td>
+    <td class="r mono">${c.distance_km?c.distance_km.toFixed(2):"—"}</td><td class="r mono">${c.duration_min?Math.round(c.duration_min)+'m':"—"}</td>
     <td class="r mono">${c.pace_min_km?pace(c.pace_min_km):"—"}</td><td class="r mono">${c.calories?fmt0(c.calories):"—"}</td></tr>`; });
   document.getElementById("cardioTable").innerHTML=html;
 }
@@ -982,6 +1038,7 @@ document.getElementById("metricSeg").addEventListener("click",e=>{ const b=e.tar
   document.querySelectorAll("#metricSeg button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); CURRENT_METRIC=b.dataset.m; renderStrength(); });
 document.getElementById("cardioSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
   document.querySelectorAll("#cardioSeg button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); CARDIO_METRIC=b.dataset.m; buildCardio(); });
+document.getElementById("cardioActSelect").addEventListener("change",e=>{ CARDIO_ACT=e.target.value; CARDIO_METRIC="pace"; buildCardio(); });
 
 document.getElementById("toggleForm").addEventListener("click",()=>{ const f=document.getElementById("addForm"); const open=f.classList.toggle("open");
   document.getElementById("toggleForm").textContent=open?"Close":"+ Add session"; if(open&&!document.getElementById("exContainer").children.length) resetStrengthForm(); });
@@ -1019,27 +1076,60 @@ document.getElementById("syncClose").addEventListener("click",()=>{ syncModal.st
 syncModal.addEventListener("click",e=>{ if(e.target===syncModal) syncModal.style.display="none"; });
 document.getElementById("syncPush").addEventListener("click",pushNow);
 
-/* ---- "talk to it" quick add ---- */
-let QA_IMAGE=null, QA_MEDIA=null;
-document.getElementById("qaPhotoBtn").addEventListener("click",()=>document.getElementById("qaPhoto").click());
-document.getElementById("qaPhoto").addEventListener("change",e=>{
+/* ---- floating coach chat ---- */
+let QA_IMAGE=null, QA_MEDIA=null, CHAT_HISTORY=[];
+const coachOverlay=document.getElementById("coachOverlay");
+function openCoach(){
+  coachOverlay.style.display="flex";
+  if(!CHAT_HISTORY.length){
+    addBubble("coach","Hey! Tell me what you ate or trained, snap a food photo, or ask me anything about your progress.");
+  }
+  setTimeout(()=>document.getElementById("chatText").focus(),50);
+}
+function closeCoach(){ coachOverlay.style.display="none"; }
+document.getElementById("coachFab").addEventListener("click",openCoach);
+document.getElementById("coachClose").addEventListener("click",closeCoach);
+coachOverlay.addEventListener("click",e=>{ if(e.target===coachOverlay) closeCoach(); });
+
+document.getElementById("chatPhotoBtn").addEventListener("click",()=>document.getElementById("chatPhoto").click());
+document.getElementById("chatPhoto").addEventListener("change",e=>{
   const f=e.target.files[0]; if(!f) return;
   const reader=new FileReader();
   reader.onload=()=>{
     QA_IMAGE=reader.result.split(",")[1]; QA_MEDIA=f.type||"image/jpeg";
-    document.getElementById("qaPreview").src=reader.result;
-    document.getElementById("qaPhotoName").textContent=f.name;
-    document.getElementById("qaPreviewWrap").style.display="flex";
+    document.getElementById("chatPreview").src=reader.result;
+    document.getElementById("chatPhotoName").textContent=f.name;
+    document.getElementById("chatPreviewWrap").style.display="flex";
   };
   reader.readAsDataURL(f);
 });
-document.getElementById("qaPhotoClear").addEventListener("click",()=>{
-  QA_IMAGE=null; QA_MEDIA=null; document.getElementById("qaPhoto").value="";
-  document.getElementById("qaPreviewWrap").style.display="none";
+document.getElementById("chatPhotoClear").addEventListener("click",()=>{
+  QA_IMAGE=null; QA_MEDIA=null; document.getElementById("chatPhoto").value="";
+  document.getElementById("chatPreviewWrap").style.display="none";
 });
-function qaStatus(msg,kind){ const el=document.getElementById("qaStatus");
-  el.style.color = kind==="err"?"var(--red)":kind==="ok"?"var(--green)":kind==="wait"?"var(--amber)":"var(--faint)";
-  el.textContent=msg; }
+
+function addBubble(who, text, imgSrc){
+  const thread=document.getElementById("chatThread");
+  const wrap=document.createElement("div");
+  const mine = who==="me";
+  wrap.style.cssText=`display:flex; ${mine?'justify-content:flex-end':'justify-content:flex-start'}`;
+  const b=document.createElement("div");
+  b.style.cssText=`max-width:80%; padding:10px 13px; border-radius:14px; font-size:14px; line-height:1.5; `
+    +(mine?`background:var(--amber); color:#1a1205; border-bottom-right-radius:4px;`
+          :`background:var(--panel2); color:var(--ink); border:1px solid var(--line); border-bottom-left-radius:4px;`);
+  if(imgSrc){ const im=document.createElement("img"); im.src=imgSrc; im.style.cssText="max-width:160px; border-radius:8px; display:block; margin-bottom:6px"; b.appendChild(im); }
+  if(text){ const t=document.createElement("div"); t.textContent=text; b.appendChild(t); }
+  wrap.appendChild(b); thread.appendChild(wrap);
+  thread.scrollTop=thread.scrollHeight;
+  return b;
+}
+function addTyping(){
+  const thread=document.getElementById("chatThread");
+  const wrap=document.createElement("div"); wrap.id="typingBubble"; wrap.style.cssText="display:flex; justify-content:flex-start";
+  wrap.innerHTML=`<div style="background:var(--panel2); border:1px solid var(--line); border-radius:14px; padding:11px 15px; color:var(--muted); font-size:13px">…</div>`;
+  thread.appendChild(wrap); thread.scrollTop=thread.scrollHeight;
+}
+function removeTyping(){ const t=document.getElementById("typingBubble"); if(t) t.remove(); }
 
 function dayContext(){
   // build a compact snapshot of today's numbers for the coach
@@ -1116,103 +1206,93 @@ function historyContext(){
   }catch(e){ return ""; }
 }
 
-async function qaSend(){
-  const text=document.getElementById("qaText").value.trim();
-  if(!text && !QA_IMAGE){ qaStatus("Type something or add a photo first.","err"); return; }
-  qaStatus("Thinking…","wait");
-  document.getElementById("qaConfirm").style.display="none";
+async function chatSend(){
+  const input=document.getElementById("chatText");
+  const text=input.value.trim();
+  if(!text && !QA_IMAGE){ return; }
+  // user bubble (with image if present)
+  const imgSrc = QA_IMAGE ? ("data:"+QA_MEDIA+";base64,"+QA_IMAGE) : null;
+  addBubble("me", text, imgSrc);
+  input.value="";
+  const sentImage=QA_IMAGE, sentMedia=QA_MEDIA;
+  document.getElementById("chatPhotoClear").click();
+  addTyping();
   try{
     const res=await fetch("/api/parse",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({idToken:ID_TOKEN, text, image:QA_IMAGE, mediaType:QA_MEDIA, context:dayContext(), history:historyContext()})});
+      body:JSON.stringify({idToken:ID_TOKEN, text, image:sentImage, mediaType:sentMedia, context:dayContext(), history:historyContext()})});
     const j=await res.json();
-    if(!j.ok){ qaStatus(j.error||"Couldn't process that.","err"); return; }
+    removeTyping();
+    if(!j.ok){ addBubble("coach", j.error||"Hmm, I couldn't process that — try rephrasing?"); return; }
     const out=j.result||{};
-    // show coaching reply if present
-    if(out.reply && out.reply.trim()){
-      const rb=document.getElementById("qaConfirm");
-      rb.innerHTML=`<div style="font-size:13.5px; line-height:1.6; color:var(--ink)">${out.reply.replace(/</g,'&lt;')}</div>`;
-      rb.style.display="block";
-    }
-    // if there's something to log, show the confirm card (appended below any reply)
-    if(out.log){ showConfirm(out.log, !!(out.reply&&out.reply.trim())); }
-    qaStatus(out.log? "" : "","");
-    if(!out.log && (!out.reply||!out.reply.trim())) qaStatus("Not sure what you meant — try rephrasing.","err");
-  }catch(e){ qaStatus("Couldn't reach the server.","err"); }
+    if(out.reply && out.reply.trim()) addBubble("coach", out.reply.trim());
+    if(out.log) showLogCard(out.log);
+    if(!out.log && (!out.reply||!out.reply.trim())) addBubble("coach","I wasn't sure what you meant there — want to try again?");
+  }catch(e){ removeTyping(); addBubble("coach","I couldn't reach the server just now. Check your connection and try again."); }
 }
-document.getElementById("qaSend").addEventListener("click",qaSend);
-document.getElementById("qaText").addEventListener("keydown",e=>{ if(e.key==="Enter") qaSend(); });
+document.getElementById("chatSend").addEventListener("click",chatSend);
+document.getElementById("chatText").addEventListener("keydown",e=>{ if(e.key==="Enter") chatSend(); });
 
-// Show an editable confirmation before committing (estimates need a human glance)
-function showConfirm(r, appendBelowReply){
-  const box=document.getElementById("qaConfirm");
+// An inline, editable confirmation card placed in the chat thread
+function showLogCard(r){
+  const thread=document.getElementById("chatThread");
   const today=new Date().toISOString().slice(0,10);
-  // if a coaching reply is already shown, append the log card under it rather than replacing
-  const prefix = appendBelowReply ? box.innerHTML + '<div style="height:10px"></div>' : '';
+  const wrap=document.createElement("div"); wrap.style.cssText="display:flex; justify-content:flex-start";
+  const box=document.createElement("div");
+  box.style.cssText="max-width:90%; background:var(--panel2); border:1px solid var(--line); border-radius:14px; border-bottom-left-radius:4px; padding:12px 13px; font-size:13px";
+  wrap.appendChild(box); thread.appendChild(wrap);
+
+  function done(msg){
+    saveStore(STORE);
+    box.innerHTML=`<span style="color:var(--green); font-weight:650">✓ ${msg}</span>`;
+    buildStrip(); buildSelect(); renderStrength(); rebuildDatalist();
+    if(document.getElementById("view-cardio").classList.contains("on")) buildCardio();
+    if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
+    thread.scrollTop=thread.scrollHeight;
+  }
+
   if(r.kind==="food" && r.items && r.items.length){
-    const rows=r.items.map((it,i)=>`<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px">
-      <input data-f="name" data-i="${i}" value="${(it.name||'').replace(/"/g,'&quot;')}" style="flex:1; background:var(--bg); border:1px solid var(--line); border-radius:6px; color:var(--ink); padding:6px 8px; font-size:13px">
-      <input data-f="kcal" data-i="${i}" type="number" value="${it.kcal||0}" style="width:70px; background:var(--bg); border:1px solid var(--line); border-radius:6px; color:var(--ink); padding:6px; font-size:13px"> kcal
-      <input data-f="p" data-i="${i}" type="number" value="${it.p||0}" style="width:54px; background:var(--bg); border:1px solid var(--line); border-radius:6px; color:var(--ink); padding:6px; font-size:13px">P
-    </div>`).join("");
-    box.innerHTML=prefix+`<div style="font-weight:650; margin-bottom:8px">Food — adds to today (${today})</div>${rows}
-      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px">
-        <button class="ghost" id="qaCancel">Cancel</button><button class="primary" id="qaCommit">Add to log</button></div>
-      <div class="hint" style="margin-top:6px">Estimates are approximate — tweak any number before adding.</div>`;
-    box.style.display="block";
-    document.getElementById("qaCommit").onclick=()=>{
-      const items=r.items.map((it,i)=>({
-        name:box.querySelector(`[data-f="name"][data-i="${i}"]`).value,
+    const rows=r.items.map((it,i)=>`<div style="display:flex; gap:6px; align-items:center; margin-bottom:6px">
+      <input data-f="name" data-i="${i}" value="${(it.name||'').replace(/"/g,'&quot;')}" style="flex:1; min-width:80px; background:var(--bg); border:1px solid var(--line); border-radius:6px; color:var(--ink); padding:6px 8px; font-size:13px">
+      <input data-f="kcal" data-i="${i}" type="number" value="${it.kcal||0}" style="width:62px; background:var(--bg); border:1px solid var(--line); border-radius:6px; color:var(--ink); padding:6px; font-size:13px">kcal
+      <input data-f="p" data-i="${i}" type="number" value="${it.p||0}" style="width:48px; background:var(--bg); border:1px solid var(--line); border-radius:6px; color:var(--ink); padding:6px; font-size:13px">P</div>`).join("");
+    box.innerHTML=`<div style="font-weight:650; margin-bottom:8px">🍽 Food → today</div>${rows}
+      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:6px"><button class="ghost" data-x="c">Skip</button><button class="primary" data-x="ok">Add</button></div>`;
+    box.querySelector('[data-x="ok"]').onclick=()=>{
+      const items=r.items.map((it,i)=>({name:box.querySelector(`[data-f="name"][data-i="${i}"]`).value,
         kcal:parseFloat(box.querySelector(`[data-f="kcal"][data-i="${i}"]`).value)||0,
-        p:parseFloat(box.querySelector(`[data-f="p"][data-i="${i}"]`).value)||0,
-        c:it.c||0, fat:it.fat||0 }));
+        p:parseFloat(box.querySelector(`[data-f="p"][data-i="${i}"]`).value)||0, c:it.c||0, fat:it.fat||0}));
       STORE.food=STORE.food||[];
       items.forEach(it=> STORE.food.push({_id:"f"+Date.now()+Math.random().toString(36).slice(2,6), date:today, ...it}));
-      commitQuickAdd("Added "+items.length+" food item"+(items.length>1?"s":""));
+      done("Added "+items.length+" item"+(items.length>1?"s":"")+" to today");
     };
   } else if(r.kind==="strength" && r.exercises && r.exercises.length){
     const summary=r.exercises.map(ex=>`${ex.name} — ${ex.sets.map(s=>`${s.reps}×${s.weight===0?'BW':s.weight}`).join(", ")}`).join("<br>");
-    box.innerHTML=prefix+`<div style="font-weight:650; margin-bottom:8px">${r.type||'Strength'} session — today (${today})</div>
-      <div style="font-size:13px; color:var(--muted); line-height:1.7">${summary}</div>
-      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px">
-        <button class="ghost" id="qaCancel">Cancel</button><button class="primary" id="qaCommit">Add session</button></div>`;
-    box.style.display="block";
-    document.getElementById("qaCommit").onclick=()=>{
-      const exercises=r.exercises.map(ex=>({name:ex.name, muscle:(MUSCLE[ex.name]||"Other"), sets:ex.sets}));
-      STORE.entries.push({kind:"strength", date:today, type:r.type||"Other", exercises});
-      commitQuickAdd(r.type+" session added");
+    box.innerHTML=`<div style="font-weight:650; margin-bottom:8px">🏋 ${r.type||'Strength'} session → today</div>
+      <div style="color:var(--muted); line-height:1.6">${summary}</div>
+      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px"><button class="ghost" data-x="c">Skip</button><button class="primary" data-x="ok">Add session</button></div>`;
+    box.querySelector('[data-x="ok"]').onclick=()=>{
+      STORE.entries.push({kind:"strength", date:today, type:r.type||"Other",
+        exercises:r.exercises.map(ex=>({name:ex.name, muscle:(MUSCLE[ex.name]||"Other"), sets:ex.sets}))});
+      done((r.type||"Strength")+" session added");
     };
   } else if(r.kind==="cardio"){
-    const pace = (r.distance_km&&r.duration_min)? (r.duration_min/r.distance_km):null;
-    box.innerHTML=prefix+`<div style="font-weight:650; margin-bottom:8px">Cardio — today (${today})</div>
-      <div style="font-size:13px; color:var(--muted)">${r.activity||'Cardio'} · ${r.distance_km?r.distance_km+' km':''} ${r.duration_min?'· '+r.duration_min+' min':''} ${r.calories?'· '+r.calories+' kcal':''}</div>
-      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px">
-        <button class="ghost" id="qaCancel">Cancel</button><button class="primary" id="qaCommit">Add cardio</button></div>`;
-    box.style.display="block";
-    document.getElementById("qaCommit").onclick=()=>{
+    const pc = (r.distance_km&&r.duration_min)? (r.duration_min/r.distance_km):null;
+    const desc=`${r.activity||'Cardio'}${r.distance_km?' · '+r.distance_km+'km':''}${r.duration_min?' · '+r.duration_min+'min':''}${r.calories?' · '+r.calories+'kcal':''}`;
+    box.innerHTML=`<div style="font-weight:650; margin-bottom:8px">🏃 Cardio → today</div>
+      <div style="color:var(--muted)">${desc}</div>
+      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px"><button class="ghost" data-x="c">Skip</button><button class="primary" data-x="ok">Add</button></div>`;
+    box.querySelector('[data-x="ok"]').onclick=()=>{
       const e={kind:"cardio", date:today, activity:r.activity||"Run"};
       if(r.distance_km) e.distance_km=r.distance_km; if(r.duration_min) e.duration_min=r.duration_min;
-      if(pace) e.pace_min_km=pace; if(r.calories) e.calories=r.calories;
-      STORE.entries.push(e);
-      commitQuickAdd("Cardio added");
+      if(pc) e.pace_min_km=pc; if(r.calories) e.calories=r.calories;
+      STORE.entries.push(e); done((r.activity||"Cardio")+" added");
     };
-  } else {
-    qaStatus("Couldn't tell if that was food or a workout — try being more specific.","err");
-    return;
-  }
-  // shared cancel
-  const c=document.getElementById("qaCancel"); if(c) c.onclick=()=>{ box.style.display="none"; };
+  } else { box.innerHTML=`<span style="color:var(--muted)">Nothing to log there.</span>`; }
+
+  const skip=box.querySelector('[data-x="c"]'); if(skip) skip.onclick=()=>{ box.innerHTML=`<span style="color:var(--faint)">Skipped.</span>`; };
+  thread.scrollTop=thread.scrollHeight;
 }
-function commitQuickAdd(msg){
-  saveStore(STORE);  // persists + schedules push to sheet
-  document.getElementById("qaConfirm").style.display="none";
-  document.getElementById("qaText").value="";
-  document.getElementById("qaPhotoClear").click();
-  qaStatus(msg+" ✓","ok");
-  // refresh views
-  buildStrip(); buildSelect(); renderStrength(); rebuildDatalist();
-  if(document.getElementById("view-cardio").classList.contains("on")) buildCardio();
-  if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
-}
+
 document.getElementById("importBtn").addEventListener("click",()=>{
   const box=document.getElementById("importBox");
   box.style.display = box.style.display==="none" ? "block" : "none";

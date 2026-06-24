@@ -1,0 +1,10 @@
+{
+  "name": "strength-log-multiuser",
+  "version": "1.0.0",
+  "description": "Multi-user strength & nutrition tracker, central Google Sheet via service account",
+  "private": true,
+  "dependencies": {
+    "google-auth-library": "^9.14.0",
+    "googleapis": "^140.0.0"
+  }
+}

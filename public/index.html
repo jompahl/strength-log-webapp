@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Strength Log</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root{
+    --bg:#13161c; --panel:#1b1f28; --panel2:#21262f; --line:#2c323d;
+    --ink:#e8eaed; --muted:#8b93a1; --faint:#5a626f;
+    --amber:#f5a623; --green:#4ade80; --green2:#46c98b; --red:#e3604d; --blue:#5b9bd5;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{background:var(--bg); color:var(--ink);
+    font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    line-height:1.45; min-height:100vh; -webkit-font-smoothing:antialiased;}
+  .mono{font-family:"SF Mono","JetBrains Mono",ui-monospace,"Roboto Mono",Menlo,Consolas,monospace}
+  .wrap{max-width:1080px; margin:0 auto; padding:24px 18px 80px}
+
+  header.top{display:flex; align-items:baseline; justify-content:space-between;
+    flex-wrap:wrap; gap:8px; padding-bottom:16px; margin-bottom:18px; border-bottom:1px solid var(--line);}
+  .brand{display:flex; align-items:baseline; gap:12px}
+  .brand h1{font-size:21px; font-weight:800; letter-spacing:-0.02em}
+  .brand .dot{width:9px; height:9px; border-radius:50%; background:var(--amber);
+    display:inline-block; box-shadow:0 0 10px var(--amber); align-self:center}
+  .brand .sub{color:var(--muted); font-size:12.5px}
+  .range{color:var(--faint); font-size:12px}
+
+  /* top tabs */
+  .tabs{display:flex; gap:4px; background:var(--panel2); border:1px solid var(--line);
+    border-radius:11px; padding:4px; margin-bottom:22px; width:fit-content}
+  .tabs button{background:transparent; border:none; color:var(--muted); padding:9px 18px;
+    font-size:13.5px; font-weight:650; cursor:pointer; border-radius:7px; transition:.12s; font-family:inherit}
+  .tabs button.on{background:var(--amber); color:#1a1205}
+  .tabs button:hover:not(.on){color:var(--ink)}
+
+  .view{display:none} .view.on{display:block}
+
+  .strip{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:22px}
+  .stat{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:13px 14px}
+  .stat .k{color:var(--muted); font-size:10.5px; text-transform:uppercase; letter-spacing:0.08em; font-weight:600}
+  .stat .v{font-size:25px; font-weight:700; margin-top:3px; letter-spacing:-0.01em}
+  .stat .v small{font-size:13px; color:var(--muted); font-weight:500}
+
+  .controls{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:18px}
+  select,button,input{font-family:inherit}
+  .selWrap{position:relative; flex:1; min-width:200px}
+  select{width:100%; appearance:none; background:var(--panel2); color:var(--ink);
+    border:1px solid var(--line); border-radius:9px; padding:11px 38px 11px 14px;
+    font-size:14px; font-weight:600; cursor:pointer;}
+  select:focus,button:focus,input:focus{outline:2px solid var(--amber); outline-offset:1px}
+  .selWrap::after{content:"▾"; position:absolute; right:14px; top:50%; transform:translateY(-50%);
+    color:var(--muted); pointer-events:none; font-size:12px}
+  .seg{display:flex; background:var(--panel2); border:1px solid var(--line); border-radius:9px; padding:3px}
+  .seg button{background:transparent; border:none; color:var(--muted); padding:8px 14px;
+    font-size:12.5px; font-weight:600; cursor:pointer; border-radius:6px; transition:.12s; white-space:nowrap}
+  .seg button.on{background:var(--amber); color:#1a1205}
+  .seg button:hover:not(.on){color:var(--ink)}
+
+  .exHead{display:flex; align-items:flex-end; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:4px}
+  .exHead .name{font-size:18px; font-weight:750; letter-spacing:-0.02em}
+  .exHead .tag{font-size:11px; color:var(--muted); border:1px solid var(--line);
+    padding:2px 9px; border-radius:20px; margin-left:10px; font-weight:600}
+  .delta{font-size:13px; font-weight:700}
+  .delta .up{color:var(--green2)} .delta .down{color:var(--red)} .delta .flat{color:var(--muted)}
+
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 16px 8px; margin-bottom:18px}
+  .chartBox{position:relative; height:300px}
+  .miniNote{color:var(--faint); font-size:11px; padding:6px 2px 2px}
+
+  .twocol{display:grid; grid-template-columns:1.3fr 1fr; gap:18px}
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px}
+  .panel h3{font-size:12px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:13px; font-weight:700}
+
+  table{width:100%; border-collapse:collapse; font-size:13px}
+  th{text-align:left; color:var(--faint); font-weight:600; font-size:10.5px; text-transform:uppercase; letter-spacing:0.05em; padding:0 8px 8px 0}
+  td{padding:7px 8px 7px 0; border-top:1px solid var(--line)}
+  td.r{text-align:right} th.r{text-align:right}
+  .pr{color:var(--amber); font-weight:700}
+  .setpill{display:inline-block; font-size:11px; color:var(--muted); margin:1px 4px 1px 0}
+
+  .addBar{margin:24px 0 8px; display:flex; justify-content:space-between; align-items:center}
+  .addBar h2{font-size:15px; font-weight:750}
+  .ghost{background:transparent; border:1px solid var(--line); color:var(--ink); padding:9px 15px;
+    border-radius:9px; font-size:13px; font-weight:600; cursor:pointer; transition:.12s}
+  .ghost:hover{border-color:var(--amber); color:var(--amber)}
+  .primary{background:var(--amber); border:none; color:#1a1205; padding:10px 18px; border-radius:9px;
+    font-size:13.5px; font-weight:700; cursor:pointer; transition:.12s}
+  .primary:hover{filter:brightness(1.08)}
+
+  .form{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:18px; display:none}
+  .form.open{display:block}
+  .frow{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; align-items:center}
+  .field{display:flex; flex-direction:column; gap:5px}
+  .field label{font-size:11px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:0.04em}
+  input[type=date],input[type=text],input[type=number]{background:var(--panel2); border:1px solid var(--line);
+    border-radius:8px; color:var(--ink); padding:9px 11px; font-size:13.5px}
+  input[type=number]{width:90px}
+  input[type=text]{min-width:200px}
+  .setRow{display:flex; gap:8px; align-items:center; margin-bottom:7px}
+  .setRow .ix{color:var(--faint); font-size:12px; width:42px; font-weight:600}
+  .linkBtn{background:none; border:none; color:var(--amber); font-size:12.5px; font-weight:600; cursor:pointer; padding:4px 0}
+  .xBtn{background:none; border:none; color:var(--faint); cursor:pointer; font-size:16px; line-height:1; padding:2px 6px}
+  .xBtn:hover{color:var(--red)}
+  .exBlock{border:1px solid var(--line); border-radius:10px; padding:13px; margin-bottom:12px; background:var(--panel2)}
+  .formActions{display:flex; gap:10px; justify-content:flex-end; margin-top:6px}
+  .hint{color:var(--faint); font-size:11.5px; margin-top:4px}
+  .toast{position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--amber); color:#1a1205; padding:12px 22px; border-radius:10px; font-weight:700;
+    font-size:13.5px; opacity:0; transition:.3s; pointer-events:none; z-index:50}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+
+  /* calorie ledger */
+  .calBar{height:34px; border-radius:8px; background:var(--panel2); overflow:hidden; display:flex; position:relative; border:1px solid var(--line)}
+  .calBar .fill{height:100%; transition:width .4s}
+  .ledger{display:grid; grid-template-columns:1fr 1fr; gap:18px}
+  .bigNum{font-size:38px; font-weight:800; letter-spacing:-0.02em; line-height:1}
+  .bigNum small{font-size:15px; font-weight:600; color:var(--muted)}
+  .rowline{display:flex; justify-content:space-between; padding:8px 0; border-top:1px solid var(--line); font-size:13.5px}
+  .rowline:first-child{border-top:none}
+  .rowline .lbl{color:var(--muted)}
+  .rowline .val{font-weight:650}
+  .foodItem{display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-top:1px solid var(--line); font-size:13px}
+  .daySelect{display:flex; gap:8px; align-items:center; margin-bottom:16px; flex-wrap:wrap}
+  .verdict{display:inline-block; padding:4px 12px; border-radius:20px; font-size:12.5px; font-weight:700; margin-left:6px}
+  .verdict.deficit{background:rgba(74,222,128,0.14); color:var(--green)}
+  .verdict.surplus{background:rgba(227,96,77,0.14); color:var(--red)}
+  .verdict.near{background:rgba(245,166,35,0.14); color:var(--amber)}
+  .macro{display:flex; gap:14px; margin-top:6px; font-size:11.5px; color:var(--muted)}
+  .macro b{color:var(--ink)}
+
+  @media(max-width:720px){
+    .strip{grid-template-columns:repeat(2,1fr)}
+    .twocol,.ledger{grid-template-columns:1fr}
+    .chartBox{height:250px}
+    .brand h1{font-size:18px}
+  }
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div id="signinOverlay" style="position:fixed; inset:0; background:var(--bg); z-index:100; display:flex; align-items:center; justify-content:center; padding:24px">
+  <div style="max-width:400px; width:100%; text-align:center">
+    <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:8px">
+      <span style="width:11px; height:11px; border-radius:50%; background:var(--amber); box-shadow:0 0 12px var(--amber)"></span>
+      <h1 style="font-size:24px; font-weight:800; letter-spacing:-0.02em">Strength Log</h1>
+    </div>
+    <p style="color:var(--muted); font-size:14px; margin-bottom:26px">Track strength, cardio, and your cut — synced to your account.</p>
+    <div id="gsiButton" style="display:flex; justify-content:center; margin-bottom:18px"></div>
+    <div id="signinMsg" style="color:var(--faint); font-size:12.5px; min-height:18px"></div>
+    <p style="color:var(--faint); font-size:11.5px; margin-top:24px; line-height:1.6">
+      Signing in shares only your name and email so your data is saved to your own space. Your friend who set this up can see the shared data sheet.
+    </p>
+  </div>
+</div>
+
+<div class="wrap" id="appWrap" style="display:none">
+  <header class="top">
+    <div class="brand"><span class="dot"></span><h1>Strength Log</h1><span class="sub" id="subLabel">e1RM progression</span></div>
+    <div style="display:flex; align-items:center; gap:12px">
+      <span class="range mono" id="dateRange"></span>
+      <button class="ghost" id="acctBtn" style="padding:7px 13px; font-size:12.5px">Account</button>
+    </div>
+  </header>
+
+  <div id="syncModal" style="display:none; position:fixed; inset:0; background:rgba(8,10,14,0.7); z-index:60; align-items:center; justify-content:center; padding:20px">
+    <div style="background:var(--panel); border:1px solid var(--line); border-radius:14px; max-width:420px; width:100%; padding:22px">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px">
+        <h2 style="font-size:17px; font-weight:750">Account</h2>
+        <button class="xBtn" id="syncClose" style="font-size:20px">✕</button>
+      </div>
+      <div id="syncStatus" style="font-size:13px; margin-bottom:14px; padding:10px 12px; border-radius:8px; background:var(--panel2)"></div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap">
+        <button class="ghost" id="syncPush">Sync now</button>
+        <button class="ghost" id="signOutBtn" style="margin-left:auto">Sign out</button>
+      </div>
+      <div class="hint" style="margin-top:14px; line-height:1.6">
+        Your data saves automatically a moment after each change, and loads when you sign in on any device.
+      </div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button data-v="strength" class="on">Strength</button>
+    <button data-v="cardio">Cardio</button>
+    <button data-v="calories">Calories</button>
+  </div>
+
+  <!-- STRENGTH VIEW -->
+  <div class="view on" id="view-strength">
+    <div class="strip" id="strip"></div>
+    <div class="controls">
+      <div class="selWrap"><select id="exSelect"></select></div>
+      <div class="seg" id="metricSeg">
+        <button data-m="e1rm" class="on">Est. 1RM</button>
+        <button data-m="topweight">Top set</button>
+        <button data-m="volume">Volume</button>
+      </div>
+    </div>
+    <div class="exHead">
+      <div><span class="name" id="exName"></span><span class="tag" id="exTag"></span></div>
+      <div class="delta mono" id="exDelta"></div>
+    </div>
+    <div class="card"><div class="chartBox"><canvas id="mainChart"></canvas></div><div class="miniNote" id="metricNote"></div></div>
+    <div class="twocol">
+      <div class="panel"><h3>Session history — <span id="histExName"></span></h3>
+        <div style="overflow-x:auto"><table id="histTable"></table></div></div>
+      <div class="panel"><h3>Personal records</h3><table id="prTable"></table></div>
+    </div>
+    <div class="addBar"><h2>Log a session</h2><button class="ghost" id="toggleForm">+ Add session</button></div>
+    <div class="form" id="addForm">
+      <div class="frow">
+        <div class="field"><label>Date</label><input type="date" id="fDate"></div>
+        <div class="field"><label>Type</label>
+          <select id="fType" style="padding:9px 30px 9px 11px; min-width:120px">
+            <option>Push</option><option>Pull</option><option>Legs</option><option>Other</option></select></div>
+      </div>
+      <div id="exContainer"></div>
+      <button class="linkBtn" id="addExBtn">+ Add exercise</button>
+      <div class="formActions"><button class="ghost" id="cancelBtn">Cancel</button><button class="primary" id="saveBtn">Save session</button></div>
+      <div class="hint">Saved on this device. Weights in kg. Assisted exercises: enter assistance as a negative number (e.g. -40).</div>
+    </div>
+  </div>
+
+  <!-- CARDIO VIEW -->
+  <div class="view" id="view-cardio">
+    <div class="strip" id="cardioStrip"></div>
+    <div class="controls">
+      <div class="seg" id="cardioSeg">
+        <button data-m="pace" class="on">Pace</button>
+        <button data-m="distance">Distance</button>
+        <button data-m="calories">Calories</button>
+      </div>
+    </div>
+    <div class="card"><div class="chartBox"><canvas id="cardioChart"></canvas></div><div class="miniNote" id="cardioNote"></div></div>
+    <div class="panel"><h3>Cardio history</h3><div style="overflow-x:auto"><table id="cardioTable"></table></div></div>
+    <div class="addBar"><h2>Log cardio</h2><button class="ghost" id="toggleCardio">+ Add cardio</button></div>
+    <div class="form" id="cardioForm">
+      <div class="frow">
+        <div class="field"><label>Date</label><input type="date" id="cDate"></div>
+        <div class="field"><label>Activity</label><input type="text" id="cAct" list="actNames" placeholder="Run" value="Run"></div>
+        <div class="field"><label>Distance (km)</label><input type="number" id="cDist" step="0.01" placeholder="8.01"></div>
+        <div class="field"><label>Time (min)</label><input type="number" id="cTime" step="0.1" placeholder="36.7"></div>
+        <div class="field"><label>Calories</label><input type="number" id="cCal" step="1" placeholder="818"></div>
+      </div>
+      <div class="formActions"><button class="ghost" id="cancelCardio">Cancel</button><button class="primary" id="saveCardio">Save cardio</button></div>
+      <div class="hint">Pace is calculated automatically from distance and time.</div>
+    </div>
+  </div>
+
+  <!-- CALORIES VIEW -->
+  <div class="view" id="view-calories">
+    <div class="daySelect">
+      <button class="ghost" id="dayPrev">‹</button>
+      <input type="date" id="calDate">
+      <button class="ghost" id="dayNext">›</button>
+      <button class="ghost" id="dayToday">Today</button>
+      <span id="calVerdict"></span>
+    </div>
+
+    <div class="card">
+      <div class="ledger">
+        <div>
+          <div style="color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:0.08em; font-weight:600; margin-bottom:8px">Net for the day</div>
+          <div class="bigNum mono" id="netNum"></div>
+          <div style="margin-top:6px; color:var(--faint); font-size:12.5px" id="netSub"></div>
+          <div class="calBar" style="margin-top:14px"><div class="fill" id="calFill"></div></div>
+          <div style="display:flex; justify-content:space-between; margin-top:6px; font-size:10.5px; color:var(--faint)">
+            <span id="barInLbl"></span><span id="barOutLbl"></span></div>
+        </div>
+        <div>
+          <div class="rowline"><span class="lbl">Resting burn (BMR×activity)</span><span class="val mono" id="lMaint"></span></div>
+          <div class="rowline"><span class="lbl">Workout burn</span><span class="val mono" id="lWorkout"></span></div>
+          <div class="rowline"><span class="lbl">Total out</span><span class="val mono" id="lOut"></span></div>
+          <div class="rowline"><span class="lbl">Food in</span><span class="val mono" id="lIn"></span></div>
+          <div class="rowline" style="border-top:2px solid var(--line)"><span class="lbl" style="color:var(--ink);font-weight:700">Deficit / surplus</span><span class="val mono" id="lNet"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:12px">
+        <div>
+          <div style="color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:0.08em; font-weight:600">Protein</div>
+          <div class="bigNum mono" id="proNum" style="font-size:30px; margin-top:4px"></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px">
+          <span style="color:var(--faint); font-size:12px">Target</span>
+          <select id="proPerKg" style="padding:7px 28px 7px 11px; font-size:13px">
+            <option value="1.6">1.6 g/kg · maintain</option>
+            <option value="1.8">1.8 g/kg · lean gain</option>
+            <option value="2.0" selected>2.0 g/kg · cut + build</option>
+            <option value="2.2">2.2 g/kg · aggressive cut</option>
+          </select>
+        </div>
+      </div>
+      <div class="calBar"><div class="fill" id="proFill"></div></div>
+      <div style="display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:var(--faint)">
+        <span id="proEaten"></span><span id="proTarget"></span>
+      </div>
+      <div class="miniNote" id="proNote"></div>
+    </div>
+
+    <div class="twocol">
+      <div class="panel">
+        <h3>Food log — <span id="foodDayLbl"></span></h3>
+        <div id="foodList"></div>
+        <div class="addBar" style="margin-top:14px"><span></span><button class="ghost" id="toggleFood">+ Add food</button></div>
+        <div class="form" id="foodForm" style="margin-top:12px; padding:14px">
+          <div class="frow">
+            <div class="field"><label>Item</label><input type="text" id="foodName" placeholder="Chicken & rice bowl"></div>
+            <div class="field"><label>Calories</label><input type="number" id="foodKcal" step="1" placeholder="650"></div>
+          </div>
+          <div class="frow">
+            <div class="field"><label>Protein (g)</label><input type="number" id="foodP" step="1" placeholder="45"></div>
+            <div class="field"><label>Carbs (g)</label><input type="number" id="foodC" step="1" placeholder="60"></div>
+            <div class="field"><label>Fat (g)</label><input type="number" id="foodF" step="1" placeholder="18"></div>
+          </div>
+          <div class="formActions"><button class="ghost" id="cancelFood">Cancel</button><button class="primary" id="saveFood">Add</button></div>
+          <div class="hint">Snap a photo of your meal in chat — I'll estimate calories + macros and give you the numbers to drop in here.</div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>7-day trend</h3>
+        <div class="chartBox" style="height:200px"><canvas id="weekChart"></canvas></div>
+        <div class="miniNote">Green bars = deficit day, red = surplus. Goal line at −<span id="goalLbl"></span> kcal.</div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:18px">
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:14px">
+        <div>
+          <h3 style="margin-bottom:6px">Weight trend</h3>
+          <div style="display:flex; align-items:baseline; gap:14px">
+            <div><span class="bigNum mono" id="wLatest" style="font-size:30px"></span></div>
+            <div class="mono" id="wRate" style="font-size:14px; font-weight:700"></div>
+          </div>
+          <div style="color:var(--faint); font-size:12px; margin-top:3px" id="wRateSub"></div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:flex-end">
+          <div class="field"><label>Morning weight (kg)</label>
+            <input type="number" id="wInput" step="0.1" placeholder="96.6" style="width:110px"></div>
+          <button class="primary" id="wSave">Log</button>
+        </div>
+      </div>
+      <div class="chartBox" style="height:240px"><canvas id="weightChart"></canvas></div>
+      <div class="miniNote">Faint dots = daily weigh-ins (they bounce ±1–2 kg from water/food — that's normal). The solid line is your 7-day average — the real signal. Aim for ~0.3–0.5 kg/week down.</div>
+    </div>
+
+    <div class="panel" style="margin-top:18px">
+      <h3>Your numbers</h3>
+      <div class="rowline"><span class="lbl">Weight / Height / Age</span><span class="val mono" id="pStats"></span></div>
+      <div class="rowline"><span class="lbl">BMR (Mifflin-St Jeor)</span><span class="val mono" id="pBmr"></span></div>
+      <div class="rowline"><span class="lbl">Activity level</span>
+        <span class="val"><select id="pActivity" style="padding:6px 26px 6px 10px; font-size:12.5px">
+          <option value="1.2">Sedentary (desk)</option>
+          <option value="1.375">Lightly active (walking pad)</option>
+          <option value="1.55">Moderately active</option>
+        </select></span></div>
+      <div class="rowline"><span class="lbl">Maintenance (resting + activity)</span><span class="val mono" id="pMaint"></span></div>
+      <div class="rowline"><span class="lbl">Daily deficit target</span><span class="val mono" id="pTarget"></span></div>
+      <div class="hint" style="margin-top:8px">For a steady cut, aim ~300–500 kcal under total-out each day. On training days you can eat more because workout burn raises your total out.</div>
+    </div>
+  </div>
+</div>
+
+<datalist id="exNames"></datalist>
+<datalist id="actNames"><option value="Run"><option value="Walk"><option value="Cycle"><option value="Row"><option value="Swim"></datalist>
+<div class="toast" id="toast"></div>
+
+<script>
+const DB = {"profile":{"weight_kg":96.6,"height_cm":190,"age":34,"sex":"male","activity":"sedentary","bmr":1988,"maintenance":2386,"deficit_target":400,"protein_per_kg":2.0},"entries":[{"kind":"strength","date":"2026-03-31","type":"Push","exercises":[{"name":"Bench Press","muscle":"Chest","sets":[{"reps":10,"weight":20},{"reps":5,"weight":60},{"reps":3,"weight":70},{"reps":1,"weight":80},{"reps":5,"weight":82.5},{"reps":5,"weight":82.5},{"reps":5,"weight":82.5},{"reps":5,"weight":82.5}]},{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":7,"weight":30},{"reps":6,"weight":30},{"reps":6,"weight":30}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":10,"weight":8},{"reps":10,"weight":8},{"reps":10,"weight":8}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":10,"weight":28.8},{"reps":10,"weight":28.8},{"reps":8,"weight":28.8}]},{"name":"Overhead Press","muscle":"Shoulders","sets":[{"reps":8,"weight":35},{"reps":7,"weight":35},{"reps":7,"weight":30}]},{"name":"Cable Chest Press","muscle":"Chest","sets":[{"reps":10,"weight":16.3},{"reps":8,"weight":18.8},{"reps":8,"weight":18.8}]}]},{"kind":"strength","date":"2026-04-09","type":"Pull","exercises":[{"name":"Machine Lat Pulldown","muscle":"Back","sets":[{"reps":10,"weight":40},{"reps":10,"weight":60},{"reps":12,"weight":90},{"reps":12,"weight":90},{"reps":12,"weight":90},{"reps":12,"weight":100}]},{"name":"Seated Machine Row","muscle":"Back","sets":[{"reps":10,"weight":50},{"reps":10,"weight":45},{"reps":10,"weight":45}]},{"name":"Pullover","muscle":"Back","sets":[{"reps":10,"weight":20},{"reps":10,"weight":20},{"reps":10,"weight":20}]},{"name":"Dumbbell Curl","muscle":"Biceps","sets":[{"reps":10,"weight":14},{"reps":10,"weight":14},{"reps":10,"weight":14}]},{"name":"Reverse Dumbbell Flyes","muscle":"Shoulders","sets":[{"reps":10,"weight":7},{"reps":10,"weight":7},{"reps":10,"weight":7}]},{"name":"Cable Curl With Rope","muscle":"Biceps","sets":[{"reps":12,"weight":20},{"reps":12,"weight":20},{"reps":10,"weight":20}]},{"name":"Assisted Pull-Up","muscle":"Back","sets":[{"reps":8,"weight":-70},{"reps":8,"weight":-70},{"reps":5,"weight":-70}]}]},{"kind":"strength","date":"2026-04-20","type":"Push","exercises":[{"name":"Dumbbell Chest Press","muscle":"Chest","sets":[{"reps":12,"weight":28},{"reps":12,"weight":28},{"reps":10,"weight":28},{"reps":4,"weight":28}]},{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":8,"weight":24},{"reps":8,"weight":22},{"reps":8,"weight":22}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":12,"weight":6},{"reps":12,"weight":6},{"reps":12,"weight":6}]},{"name":"Bulgarian Split Squat","muscle":"Legs","sets":[{"reps":6,"weight":0},{"reps":6,"weight":0},{"reps":6,"weight":0}]},{"name":"Machine Chest Press","muscle":"Chest","sets":[{"reps":10,"weight":50},{"reps":8,"weight":46},{"reps":7,"weight":41}]}]},{"kind":"strength","date":"2026-04-23","type":"Legs","exercises":[{"name":"Leg Extension","muscle":"Legs","sets":[{"reps":15,"weight":65},{"reps":15,"weight":65},{"reps":15,"weight":70}]},{"name":"Lying Leg Curl","muscle":"Legs","sets":[{"reps":15,"weight":20},{"reps":15,"weight":20},{"reps":15,"weight":30}]},{"name":"Assisted Pull-Up","muscle":"Back","sets":[{"reps":10,"weight":-70},{"reps":5,"weight":-50},{"reps":6,"weight":-60}]},{"name":"Leg Press","muscle":"Legs","sets":[{"reps":15,"weight":60},{"reps":15,"weight":100},{"reps":15,"weight":100},{"reps":15,"weight":100}]},{"name":"Standing Calf Raise","muscle":"Legs","sets":[{"reps":20,"weight":0},{"reps":40,"weight":0},{"reps":40,"weight":0},{"reps":40,"weight":0}]},{"name":"Hip Thrust","muscle":"Legs","sets":[{"reps":10,"weight":60},{"reps":10,"weight":60},{"reps":10,"weight":60}]},{"name":"Bulgarian Split Squat","muscle":"Legs","sets":[{"reps":8,"weight":14},{"reps":8,"weight":14},{"reps":8,"weight":14}]},{"name":"Squat","muscle":"Legs","sets":[{"reps":15,"weight":0},{"reps":15,"weight":0},{"reps":15,"weight":0}]}]},{"kind":"strength","date":"2026-04-30","type":"Push","exercises":[{"name":"Dumbbell Chest Press","muscle":"Chest","sets":[{"reps":10,"weight":32},{"reps":10,"weight":32},{"reps":8,"weight":32},{"reps":6,"weight":32}]},{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":8,"weight":25},{"reps":8,"weight":25},{"reps":8,"weight":25}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":10,"weight":8},{"reps":10,"weight":8},{"reps":10,"weight":7}]},{"name":"Cable Incline Chest Fly","muscle":"Chest","sets":[{"reps":10,"weight":11.3},{"reps":10,"weight":11.3},{"reps":10,"weight":11.3}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":10,"weight":28.8},{"reps":10,"weight":28.8},{"reps":8,"weight":28.8}]}]},{"kind":"strength","date":"2026-05-04","type":"Pull","exercises":[{"name":"Seated Machine Row","muscle":"Back","sets":[{"reps":10,"weight":20},{"reps":10,"weight":45},{"reps":10,"weight":45},{"reps":10,"weight":45}]},{"name":"Machine Lat Pulldown","muscle":"Back","sets":[{"reps":10,"weight":45.4},{"reps":10,"weight":49.9},{"reps":10,"weight":49.9}]},{"name":"Pullover","muscle":"Back","sets":[{"reps":10,"weight":20},{"reps":10,"weight":20},{"reps":10,"weight":20}]},{"name":"Dumbbell Curl","muscle":"Biceps","sets":[{"reps":10,"weight":14},{"reps":10,"weight":14},{"reps":10,"weight":14}]},{"name":"Face Pull","muscle":"Shoulders","sets":[{"reps":12,"weight":15},{"reps":12,"weight":15},{"reps":12,"weight":15}]}]},{"kind":"strength","date":"2026-05-07","type":"Push","exercises":[{"name":"Dumbbell Chest Press","muscle":"Chest","sets":[{"reps":10,"weight":32},{"reps":10,"weight":32},{"reps":7,"weight":32}]},{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":7,"weight":26},{"reps":7,"weight":24},{"reps":7,"weight":24}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":10,"weight":8},{"reps":10,"weight":8},{"reps":10,"weight":8}]},{"name":"Machine Chest Fly","muscle":"Chest","sets":[{"reps":9,"weight":61},{"reps":8,"weight":61},{"reps":7,"weight":61}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":10,"weight":27},{"reps":9,"weight":27},{"reps":6,"weight":27}]},{"name":"Push-Up","muscle":"Chest","sets":[{"reps":12,"weight":0},{"reps":12,"weight":0},{"reps":12,"weight":0}]},{"name":"Seated Calf Raise","muscle":"Legs","sets":[{"reps":20,"weight":40},{"reps":20,"weight":40},{"reps":20,"weight":40}]}]},{"kind":"strength","date":"2026-05-09","type":"Legs","exercises":[{"name":"Leg Extension","muscle":"Legs","sets":[{"reps":15,"weight":70},{"reps":15,"weight":70},{"reps":15,"weight":70}]},{"name":"Lying Leg Curl","muscle":"Legs","sets":[{"reps":15,"weight":50},{"reps":12,"weight":70},{"reps":12,"weight":70}]},{"name":"Leg Press","muscle":"Legs","sets":[{"reps":15,"weight":120},{"reps":15,"weight":120},{"reps":15,"weight":120},{"reps":15,"weight":120}]},{"name":"Hip Thrust","muscle":"Legs","sets":[{"reps":10,"weight":70},{"reps":10,"weight":70},{"reps":10,"weight":70}]},{"name":"Bulgarian Split Squat","muscle":"Legs","sets":[{"reps":8,"weight":18},{"reps":8,"weight":18},{"reps":8,"weight":18}]},{"name":"Squat","muscle":"Legs","sets":[{"reps":15,"weight":0},{"reps":15,"weight":0},{"reps":15,"weight":0}]}]},{"kind":"strength","date":"2026-05-11","type":"Push","exercises":[{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":10,"weight":32},{"reps":10,"weight":32},{"reps":7,"weight":32}]},{"name":"Dumbbell Chest Press","muscle":"Chest","sets":[{"reps":8,"weight":26},{"reps":8,"weight":26},{"reps":8,"weight":26}]},{"name":"Seated Dumbbell Shoulder Press","muscle":"Shoulders","sets":[{"reps":8,"weight":22},{"reps":8,"weight":20},{"reps":7,"weight":20}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":11,"weight":8},{"reps":10,"weight":8},{"reps":10,"weight":8}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":10,"weight":27.5},{"reps":10,"weight":27.5},{"reps":10,"weight":27.5}]},{"name":"Machine Chest Fly","muscle":"Chest","sets":[{"reps":10,"weight":61},{"reps":10,"weight":61},{"reps":7,"weight":61}]},{"name":"Push-Up","muscle":"Chest","sets":[{"reps":15,"weight":0},{"reps":10,"weight":0}]}]},{"kind":"strength","date":"2026-05-12","type":"Pull","exercises":[{"name":"Assisted Pull-Up","muscle":"Back","sets":[{"reps":7,"weight":-40},{"reps":6,"weight":-40},{"reps":6,"weight":-50},{"reps":5,"weight":-50},{"reps":5,"weight":-70}]},{"name":"Cable Wide Grip Seated Row","muscle":"Back","sets":[{"reps":12,"weight":48.8},{"reps":12,"weight":48.8},{"reps":12,"weight":48.8}]},{"name":"Pullover","muscle":"Back","sets":[{"reps":12,"weight":20},{"reps":12,"weight":20},{"reps":12,"weight":20}]},{"name":"Dumbbell Curl","muscle":"Biceps","sets":[{"reps":10,"weight":15},{"reps":10,"weight":15},{"reps":10,"weight":15}]},{"name":"Face Pull","muscle":"Shoulders","sets":[{"reps":12,"weight":16.3},{"reps":12,"weight":16.3},{"reps":12,"weight":16.3}]},{"name":"Machine Bicep Curl","muscle":"Biceps","sets":[{"reps":12,"weight":null},{"reps":12,"weight":null},{"reps":10,"weight":null}]}]},{"kind":"strength","date":"2026-05-18","type":"Pull","exercises":[{"name":"Machine Lat Pulldown","muscle":"Back","sets":[{"reps":10,"weight":36.3},{"reps":10,"weight":63.5},{"reps":10,"weight":72.6},{"reps":10,"weight":68}]},{"name":"Seated Machine Row","muscle":"Back","sets":[{"reps":10,"weight":45},{"reps":10,"weight":45},{"reps":10,"weight":45}]},{"name":"Dumbbell Curl","muscle":"Biceps","sets":[{"reps":11,"weight":14},{"reps":11,"weight":14},{"reps":11,"weight":14}]},{"name":"Straight Arm Lat Pulldown","muscle":"Back","sets":[{"reps":8,"weight":25},{"reps":12,"weight":20},{"reps":12,"weight":20}]},{"name":"Face Pull","muscle":"Shoulders","sets":[{"reps":12,"weight":15},{"reps":12,"weight":15},{"reps":12,"weight":15}]},{"name":"Machine Bicep Curl","muscle":"Biceps","sets":[{"reps":12,"weight":30},{"reps":11,"weight":30},{"reps":10,"weight":30}]},{"name":"Assisted Pull-Up","muscle":"Back","sets":[{"reps":4,"weight":-50},{"reps":4,"weight":-60},{"reps":4,"weight":-70}]}]},{"kind":"strength","date":"2026-05-19","type":"Push","exercises":[{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":10,"weight":32},{"reps":10,"weight":32},{"reps":8,"weight":32}]},{"name":"Dumbbell Chest Press","muscle":"Chest","sets":[{"reps":8,"weight":28},{"reps":8,"weight":28},{"reps":8,"weight":28}]},{"name":"Seated Dumbbell Shoulder Press","muscle":"Shoulders","sets":[{"reps":7,"weight":20},{"reps":7,"weight":20},{"reps":6,"weight":20}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":11,"weight":8},{"reps":10,"weight":8},{"reps":10,"weight":8}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":10,"weight":27},{"reps":9,"weight":27},{"reps":7,"weight":27}]},{"name":"Machine Chest Fly","muscle":"Chest","sets":[{"reps":12,"weight":54},{"reps":12,"weight":54},{"reps":11,"weight":54}]},{"name":"Push-Up","muscle":"Chest","sets":[{"reps":15,"weight":0},{"reps":10,"weight":0}]}]},{"kind":"strength","date":"2026-05-21","type":"Legs","exercises":[{"name":"Squat","muscle":"Legs","sets":[{"reps":10,"weight":20},{"reps":5,"weight":60},{"reps":3,"weight":90},{"reps":6,"weight":110},{"reps":6,"weight":90},{"reps":6,"weight":90}]},{"name":"Romanian Deadlift","muscle":"Legs","sets":[{"reps":8,"weight":70},{"reps":10,"weight":70},{"reps":10,"weight":70}]},{"name":"Leg Extension","muscle":"Legs","sets":[{"reps":15,"weight":null},{"reps":20,"weight":null},{"reps":20,"weight":null}]},{"name":"Seated Leg Curl","muscle":"Legs","sets":[{"reps":15,"weight":null},{"reps":20,"weight":null},{"reps":20,"weight":null}]},{"name":"Bulgarian Split Squat","muscle":"Legs","sets":[{"reps":8,"weight":17.5},{"reps":8,"weight":17.5},{"reps":8,"weight":17.5}]}]},{"kind":"strength","date":"2026-05-26","type":"Push","exercises":[{"name":"Bench Press","muscle":"Chest","sets":[{"reps":10,"weight":20},{"reps":5,"weight":60},{"reps":3,"weight":70},{"reps":1,"weight":80},{"reps":5,"weight":85},{"reps":5,"weight":85},{"reps":5,"weight":85},{"reps":5,"weight":85}]},{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":8,"weight":32},{"reps":8,"weight":32},{"reps":8,"weight":32}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":10,"weight":9},{"reps":10,"weight":9},{"reps":10,"weight":9}]},{"name":"Seated Dumbbell Shoulder Press","muscle":"Shoulders","sets":[{"reps":7,"weight":20},{"reps":7,"weight":20},{"reps":7,"weight":20}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":8,"weight":31.3},{"reps":8,"weight":31.3},{"reps":8,"weight":31.3}]},{"name":"Machine Chest Press","muscle":"Chest","sets":[{"reps":12,"weight":null},{"reps":12,"weight":null},{"reps":15,"weight":null}]}]},{"kind":"strength","date":"2026-05-28","type":"Pull","exercises":[{"name":"Pullover","muscle":"Back","sets":[{"reps":10,"weight":22.5},{"reps":10,"weight":22.5},{"reps":10,"weight":22.5}]},{"name":"Dumbbell Curl","muscle":"Biceps","sets":[{"reps":6,"weight":17.5},{"reps":7,"weight":17.5},{"reps":7,"weight":17.5}]},{"name":"Pull-Up","muscle":"Back","sets":[{"reps":6,"weight":-30},{"reps":6,"weight":-30},{"reps":6,"weight":-30},{"reps":5,"weight":-30},{"reps":5,"weight":-30}]},{"name":"Cable Wide Grip Seated Row","muscle":"Back","sets":[{"reps":10,"weight":48.8},{"reps":10,"weight":48.8},{"reps":10,"weight":48.8}]},{"name":"Face Pull","muscle":"Shoulders","sets":[{"reps":10,"weight":21.3},{"reps":10,"weight":21.3},{"reps":10,"weight":21.3}]},{"name":"Machine Lat Pulldown","muscle":"Back","sets":[{"reps":10,"weight":null},{"reps":10,"weight":null},{"reps":10,"weight":null}]}]},{"kind":"strength","date":"2026-06-02","type":"Push","exercises":[{"name":"Bench Press","muscle":"Chest","sets":[{"reps":10,"weight":20},{"reps":5,"weight":60},{"reps":3,"weight":70},{"reps":1,"weight":80},{"reps":5,"weight":87.5},{"reps":5,"weight":87.5},{"reps":5,"weight":87.5},{"reps":5,"weight":85}]},{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":8,"weight":32},{"reps":7,"weight":32},{"reps":6,"weight":32}]},{"name":"Seated Dumbbell Shoulder Press","muscle":"Shoulders","sets":[{"reps":8,"weight":20},{"reps":8,"weight":20},{"reps":8,"weight":20}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":10,"weight":9},{"reps":10,"weight":9},{"reps":10,"weight":9}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":8,"weight":31.3},{"reps":8,"weight":31.3},{"reps":8,"weight":31.3}]},{"name":"Cable Chest Press","muscle":"Chest","sets":[{"reps":10,"weight":18.8},{"reps":10,"weight":18.8},{"reps":10,"weight":18.8}]},{"name":"Overhead Cable Triceps Extension","muscle":"Triceps","sets":[{"reps":10,"weight":18.8},{"reps":8,"weight":23.8},{"reps":7,"weight":23.8}]}]},{"kind":"strength","date":"2026-06-06","type":"Pull","exercises":[{"name":"Assisted Pull-Up","muscle":"Back","sets":[{"reps":6,"weight":-40},{"reps":5,"weight":-40},{"reps":5,"weight":-40},{"reps":4,"weight":-40},{"reps":3,"weight":-40}]},{"name":"Machine Lat Pulldown","muscle":"Back","sets":[{"reps":8,"weight":68},{"reps":8,"weight":68},{"reps":8,"weight":68}]},{"name":"Seated Machine Row","muscle":"Back","sets":[{"reps":8,"weight":45},{"reps":8,"weight":45},{"reps":8,"weight":45}]},{"name":"Straight Arm Lat Pulldown","muscle":"Back","sets":[{"reps":8,"weight":36},{"reps":8,"weight":36},{"reps":8,"weight":36}]},{"name":"Dumbbell Curl","muscle":"Biceps","sets":[{"reps":7,"weight":18},{"reps":7,"weight":18},{"reps":7,"weight":18}]},{"name":"Barbell Preacher Curl","muscle":"Biceps","sets":[{"reps":10,"weight":20},{"reps":7,"weight":30},{"reps":7,"weight":30},{"reps":5,"weight":30}]},{"name":"Face Pull","muscle":"Shoulders","sets":[{"reps":12,"weight":15},{"reps":12,"weight":15},{"reps":12,"weight":15},{"reps":12,"weight":15}]}]},{"kind":"strength","date":"2026-06-09","type":"Push","exercises":[{"name":"Bench Press","muscle":"Chest","sets":[{"reps":10,"weight":20},{"reps":5,"weight":60},{"reps":3,"weight":70},{"reps":1,"weight":80},{"reps":5,"weight":87.5},{"reps":5,"weight":87.5},{"reps":5,"weight":87.5},{"reps":5,"weight":87.5}]},{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":8,"weight":32},{"reps":8,"weight":32},{"reps":8,"weight":32}]},{"name":"Seated Dumbbell Shoulder Press","muscle":"Shoulders","sets":[{"reps":8,"weight":22.5},{"reps":8,"weight":22.5},{"reps":8,"weight":22.5}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":11,"weight":9},{"reps":10,"weight":9},{"reps":10,"weight":9}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":10,"weight":31.3},{"reps":10,"weight":31.3},{"reps":9,"weight":31.3}]},{"name":"Cable Chest Press","muscle":"Chest","sets":[{"reps":11,"weight":18.8},{"reps":11,"weight":18.8},{"reps":10,"weight":18.8}]},{"name":"Overhead Cable Triceps Extension","muscle":"Triceps","sets":[{"reps":8,"weight":23.8},{"reps":8,"weight":23.8},{"reps":8,"weight":23.8}]}]},{"kind":"strength","date":"2026-06-11","type":"Pull","exercises":[{"name":"Assisted Pull-Up","muscle":"Back","sets":[{"reps":5,"weight":-30},{"reps":4,"weight":-30},{"reps":3,"weight":-30},{"reps":3,"weight":-30},{"reps":3,"weight":-30},{"reps":2,"weight":-30},{"reps":1,"weight":-30}]},{"name":"Cable Wide Grip Seated Row","muscle":"Back","sets":[{"reps":12,"weight":48.8},{"reps":12,"weight":48.8},{"reps":12,"weight":48.8}]},{"name":"Straight Arm Lat Pulldown","muscle":"Back","sets":[{"reps":10,"weight":23.8},{"reps":8,"weight":28.8},{"reps":7,"weight":28.8}]},{"name":"Dumbbell Curl","muscle":"Biceps","sets":[{"reps":6,"weight":20},{"reps":6,"weight":20},{"reps":6,"weight":20}]},{"name":"Machine Lat Pulldown","muscle":"Back","sets":[{"reps":10,"weight":null},{"reps":10,"weight":null},{"reps":10,"weight":null}]},{"name":"Face Pull","muscle":"Shoulders","sets":[{"reps":15,"weight":13.8},{"reps":12,"weight":16.3},{"reps":12,"weight":16.3},{"reps":12,"weight":16.3}]},{"name":"Decline Bench Sit-Up","muscle":"Core","sets":[{"reps":30,"weight":0},{"reps":30,"weight":0},{"reps":30,"weight":0}]},{"name":"Machine Bicep Curl","muscle":"Biceps","sets":[{"reps":15,"weight":null},{"reps":14,"weight":null},{"reps":13,"weight":null}]}]},{"kind":"strength","date":"2026-06-16","type":"Push","exercises":[{"name":"Bench Press","muscle":"Chest","sets":[{"reps":10,"weight":20},{"reps":5,"weight":60},{"reps":3,"weight":70},{"reps":1,"weight":80},{"reps":4,"weight":90},{"reps":4,"weight":90},{"reps":4,"weight":90},{"reps":4,"weight":90}]},{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":7,"weight":34},{"reps":7,"weight":34},{"reps":6,"weight":34}]},{"name":"Seated Dumbbell Shoulder Press","muscle":"Shoulders","sets":[{"reps":7,"weight":25},{"reps":7,"weight":25},{"reps":6,"weight":25}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":11,"weight":9},{"reps":11,"weight":9},{"reps":10,"weight":9}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":10,"weight":31.3},{"reps":10,"weight":31.3},{"reps":9,"weight":31.3}]},{"name":"Cable Chest Press","muscle":"Chest","sets":[{"reps":10,"weight":21.3},{"reps":10,"weight":21.3},{"reps":8,"weight":21.3}]},{"name":"Overhead Cable Triceps Extension","muscle":"Triceps","sets":[{"reps":9,"weight":23.8},{"reps":8,"weight":23.8},{"reps":8,"weight":23.8}]}]},{"kind":"strength","date":"2026-06-17","type":"Legs","exercises":[{"name":"Squat","muscle":"Legs","sets":[{"reps":10,"weight":20},{"reps":5,"weight":60},{"reps":6,"weight":90},{"reps":6,"weight":90},{"reps":6,"weight":90},{"reps":6,"weight":90}]},{"name":"Deadlift","muscle":"Legs","sets":[{"reps":6,"weight":110},{"reps":6,"weight":110},{"reps":6,"weight":110},{"reps":5,"weight":110}]},{"name":"Lying Leg Curl","muscle":"Legs","sets":[{"reps":12,"weight":75},{"reps":11,"weight":75},{"reps":9,"weight":75}]},{"name":"Leg Extension","muscle":"Legs","sets":[{"reps":12,"weight":80},{"reps":12,"weight":80},{"reps":12,"weight":80}]},{"name":"Bulgarian Split Squat","muscle":"Legs","sets":[{"reps":8,"weight":20},{"reps":8,"weight":20},{"reps":8,"weight":20}]},{"name":"Seated Calf Raise","muscle":"Legs","sets":[{"reps":15,"weight":50},{"reps":15,"weight":50},{"reps":15,"weight":50}]}]},{"kind":"strength","date":"2026-06-18","type":"Pull","exercises":[{"name":"Assisted Pull-Up","muscle":"Back","sets":[{"reps":5,"weight":-16},{"reps":4,"weight":-16},{"reps":4,"weight":-16},{"reps":3,"weight":-16},{"reps":3,"weight":-16}]},{"name":"Machine Lat Pulldown","muscle":"Back","sets":[{"reps":12,"weight":null},{"reps":12,"weight":null},{"reps":12,"weight":null}]},{"name":"Dumbbell Row","muscle":"Back","sets":[{"reps":6,"weight":34},{"reps":8,"weight":30},{"reps":8,"weight":30}]},{"name":"Pullover","muscle":"Back","sets":[{"reps":8,"weight":25},{"reps":8,"weight":25},{"reps":8,"weight":25}]},{"name":"Dumbbell Curl","muscle":"Biceps","sets":[{"reps":6,"weight":20},{"reps":6,"weight":20},{"reps":6,"weight":20}]},{"name":"Face Pull","muscle":"Shoulders","sets":[{"reps":12,"weight":16.3},{"reps":12,"weight":18.8},{"reps":12,"weight":18.8}]},{"name":"Decline Bench Sit-Up","muscle":"Core","sets":[{"reps":30,"weight":0},{"reps":30,"weight":0},{"reps":30,"weight":0}]},{"name":"Machine Bicep Curl","muscle":"Biceps","sets":[{"reps":15,"weight":null},{"reps":14,"weight":null},{"reps":13,"weight":null}]}]},{"kind":"strength","date":"2026-06-23","type":"Push","exercises":[{"name":"Bench Press","muscle":"Chest","sets":[{"reps":10,"weight":20},{"reps":5,"weight":60},{"reps":3,"weight":70},{"reps":1,"weight":80},{"reps":5,"weight":90},{"reps":5,"weight":90},{"reps":5,"weight":90},{"reps":5,"weight":90}]},{"name":"Incline Dumbbell Press","muscle":"Chest","sets":[{"reps":8,"weight":34},{"reps":7,"weight":34},{"reps":6,"weight":34}]},{"name":"Seated Dumbbell Shoulder Press","muscle":"Shoulders","sets":[{"reps":8,"weight":25},{"reps":7,"weight":25},{"reps":7,"weight":25}]},{"name":"Dumbbell Lateral Raise","muscle":"Shoulders","sets":[{"reps":11,"weight":9},{"reps":11,"weight":9},{"reps":10,"weight":9}]},{"name":"Tricep Pushdown With Rope","muscle":"Triceps","sets":[{"reps":10,"weight":31.3},{"reps":10,"weight":31.3},{"reps":9,"weight":31.3}]},{"name":"Cable Chest Press","muscle":"Chest","sets":[{"reps":10,"weight":21.3},{"reps":10,"weight":21.3},{"reps":9,"weight":21.3}]},{"name":"Overhead Cable Triceps Extension","muscle":"Triceps","sets":[{"reps":9,"weight":23.8},{"reps":9,"weight":23.8},{"reps":9,"weight":23.8}]},{"name":"Push-Up","muscle":"Chest","sets":[{"reps":10,"weight":0},{"reps":10,"weight":0}]}]},{"kind":"cardio","date":"2026-06-24","activity":"Run","distance_km":8.01,"duration_min":36.67,"pace_min_km":4.583,"calories":818,"note":"Ribersborg, Malm\u00f6"}],"food":[{"_id":"seed_bf_0624","date":"2026-06-24","name":"2 buns w/ cheese + egg","kcal":480,"p":24,"c":50,"fat":21},{"_id":"seed_lu_0624","date":"2026-06-24","name":"Pepper steak (300g) + rice","kcal":1000,"p":70,"c":75,"fat":42},{"_id":"seed_di_0624","date":"2026-06-24","name":"Chicken salad bowl","kcal":400,"p":35,"c":20,"fat":18}]};
+const MUSCLE = {
+  "Bench Press":"Chest","Dumbbell Chest Press":"Chest","Incline Dumbbell Press":"Chest",
+  "Machine Chest Press":"Chest","Machine Chest Fly":"Chest","Cable Chest Press":"Chest",
+  "Cable Incline Chest Fly":"Chest","Push-Up":"Chest","Overhead Press":"Shoulders",
+  "Seated Dumbbell Shoulder Press":"Shoulders","Dumbbell Lateral Raise":"Shoulders",
+  "Reverse Dumbbell Flyes":"Shoulders","Face Pull":"Shoulders","Tricep Pushdown With Rope":"Triceps",
+  "Overhead Cable Triceps Extension":"Triceps","Machine Lat Pulldown":"Back","Seated Machine Row":"Back",
+  "Pullover":"Back","Cable Wide Grip Seated Row":"Back","Straight Arm Lat Pulldown":"Back",
+  "Assisted Pull-Up":"Back","Pull-Up":"Back","Dumbbell Row":"Back","Dumbbell Curl":"Biceps",
+  "Cable Curl With Rope":"Biceps","Machine Bicep Curl":"Biceps","Barbell Preacher Curl":"Biceps",
+  "Leg Extension":"Legs","Lying Leg Curl":"Legs","Seated Leg Curl":"Legs","Leg Press":"Legs",
+  "Squat":"Legs","Hip Thrust":"Legs","Bulgarian Split Squat":"Legs","Romanian Deadlift":"Legs",
+  "Deadlift":"Legs","Standing Calf Raise":"Legs","Seated Calf Raise":"Legs","Decline Bench Sit-Up":"Core"
+};
+const muscleOf = n => MUSCLE[n] || "Other";
+
+// rough workout-burn estimate for strength sessions without logged calories (kcal)
+const STRENGTH_BURN = {Push:300, Pull:300, Legs:380, Other:280};
+
+// ---- storage ----
+const LS_KEY = "strengthlog.v2";
+function loadStore(){
+  try{ const r=localStorage.getItem(LS_KEY); return r?JSON.parse(r):{entries:[],food:[],profile:null}; }
+  catch(e){ return {entries:[],food:[],profile:null}; }
+}
+function saveStore(s){ try{ localStorage.setItem(LS_KEY, JSON.stringify(s)); }catch(e){ toast("Storage unavailable"); } schedulePush(); }
+
+/* ===================== AUTH + CLOUD SYNC ===================== */
+let CLIENT_ID_RESOLVED = "";   // fetched from /api/config at startup
+const API_URL = "/api/sync";
+let ID_TOKEN = null;        // current Google ID token (proof of identity)
+let CURRENT_USER = null;    // {email, name}
+let pushTimer=null;
+
+function syncPayload(){
+  return {entries:STORE.entries||[], food:STORE.food||[], weights:STORE.weights||[],
+    hiddenFood:STORE.hiddenFood||[], profile:STORE.profile||{}, seedImported:!!STORE.seedImported};
+}
+function applyPayload(d){
+  if(!d) return;
+  STORE.entries=d.entries||[]; STORE.food=d.food||[]; STORE.weights=d.weights||[];
+  STORE.hiddenFood=d.hiddenFood||[]; if(d.profile&&Object.keys(d.profile).length) STORE.profile=d.profile;
+  if(typeof d.seedImported!=="undefined") STORE.seedImported=!!d.seedImported;
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
+}
+
+function schedulePush(){
+  if(!ID_TOKEN) return;            // not signed in → local only
+  clearTimeout(pushTimer);
+  pushTimer=setTimeout(pushNow, 1500);
+}
+async function apiCall(action, data){
+  const res=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({idToken:ID_TOKEN, action, data})});
+  return res.json();
+}
+async function pushNow(){
+  if(!ID_TOKEN) return;
+  setSyncStatus("Saving…","wait");
+  try{
+    const j=await apiCall("save", syncPayload());
+    if(j.ok){ const t=new Date().toLocaleTimeString(); setSyncStatus("Saved ✓ "+t,"ok"); }
+    else if(/sign-in/i.test(j.error||"")){ setSyncStatus("Session expired — sign in again.","err"); requireSignIn(); }
+    else setSyncStatus("Save error: "+(j.error||"unknown"),"err");
+  }catch(e){ setSyncStatus("Couldn't reach the server. Check your connection.","err"); }
+}
+async function pullNow(){
+  if(!ID_TOKEN) return;
+  setSyncStatus("Loading your data…","wait");
+  try{
+    const j=await apiCall("load", null);
+    if(j.ok){
+      const remote=j.data;
+      const hasRemote=remote&&((remote.entries&&remote.entries.length)||(remote.food&&remote.food.length)||(remote.weights&&remote.weights.length));
+      if(hasRemote){ applyPayload(remote); }
+      else {
+        // new user: seed their account with the demo history once, then push
+        if(!STORE.seedImported) seedNewUser();
+        await pushNow();
+      }
+      const t=new Date().toLocaleTimeString(); setSyncStatus("Synced ✓ "+t,"ok");
+      buildStrip(); buildSelect(); renderStrength(); rebuildDatalist();
+      if(document.getElementById("view-cardio").classList.contains("on")) buildCardio();
+      if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
+    } else if(/sign-in/i.test(j.error||"")){ requireSignIn(); }
+    else setSyncStatus("Load error: "+(j.error||"unknown"),"err");
+  }catch(e){ setSyncStatus("Couldn't reach the server.","err"); }
+}
+function seedNewUser(){
+  // fold the built-in demo history into STORE so each new account starts populated
+  const existingKeys=new Set((STORE.entries||[]).map(e=>e.kind+"|"+e.date+"|"+(e.type||e.activity||"")));
+  (DB.entries||[]).forEach(e=>{ const k=e.kind+"|"+e.date+"|"+(e.type||e.activity||""); if(!existingKeys.has(k)) STORE.entries.push(JSON.parse(JSON.stringify(e))); });
+  STORE.food=STORE.food||[];
+  const ef=new Set((STORE.food||[]).map(f=>f._id));
+  (DB.food||[]).forEach(f=>{ if(!ef.has(f._id)) STORE.food.push(JSON.parse(JSON.stringify(f))); });
+  seedStarterWeight();
+  STORE.seedImported=true;
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
+}
+function setSyncStatus(msg,kind){
+  const el=document.getElementById("syncStatus"); if(el){
+    const col=kind==="ok"?"var(--green)":kind==="err"?"var(--red)":kind==="wait"?"var(--amber)":"var(--muted)";
+    el.style.color=col; el.textContent=msg;
+  }
+  const b=document.getElementById("acctBtn");
+  if(b&&CURRENT_USER){ b.textContent=(CURRENT_USER.name||"Account").split(" ")[0]; }
+}
+
+/* ---- Google Sign-In ---- */
+function handleCredential(resp){
+  ID_TOKEN = resp.credential;
+  let newUser={email:"",name:"Account"};
+  try{
+    const payload=JSON.parse(atob(resp.credential.split(".")[1]));
+    newUser={email:payload.email, name:payload.name||payload.email, sub:payload.sub};
+  }catch(e){}
+  // if switching accounts on this device, wipe local cache so we don't show stale data
+  const prevSub=localStorage.getItem("strengthlog.sub");
+  if(prevSub && newUser.sub && prevSub!==newUser.sub){
+    STORE={entries:[],food:[],weights:[],hiddenFood:[],profile:JSON.parse(JSON.stringify(DB.profile)),seedImported:false};
+    try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
+  }
+  if(newUser.sub) localStorage.setItem("strengthlog.sub", newUser.sub);
+  CURRENT_USER=newUser;
+  sessionStorage.setItem("idtoken", ID_TOKEN);
+  showApp();
+  pullNow();
+}
+function showApp(){
+  document.getElementById("signinOverlay").style.display="none";
+  document.getElementById("appWrap").style.display="block";
+  const b=document.getElementById("acctBtn");
+  if(b&&CURRENT_USER) b.textContent=(CURRENT_USER.name||"Account").split(" ")[0];
+}
+function requireSignIn(){
+  ID_TOKEN=null; CURRENT_USER=null; sessionStorage.removeItem("idtoken");
+  document.getElementById("appWrap").style.display="none";
+  document.getElementById("signinOverlay").style.display="flex";
+}
+function initGoogle(){
+  if(!window.google||!google.accounts){ setTimeout(initGoogle,300); return; }
+  if(!CLIENT_ID_RESOLVED){
+    // fetch the public client ID from the server, then retry
+    fetch("/api/config").then(r=>r.json()).then(j=>{
+      CLIENT_ID_RESOLVED=j.clientId||"";
+      if(!CLIENT_ID_RESOLVED){ document.getElementById("signinMsg").textContent="App not configured yet: missing Google client ID."; return; }
+      initGoogle();
+    }).catch(()=>{ document.getElementById("signinMsg").textContent="Couldn't reach the server to start sign-in."; });
+    return;
+  }
+  google.accounts.id.initialize({client_id:CLIENT_ID_RESOLVED, callback:handleCredential, auto_select:true});
+  google.accounts.id.renderButton(document.getElementById("gsiButton"),
+    {theme:"filled_black", size:"large", text:"continue_with", shape:"pill", width:280});
+  google.accounts.id.prompt();
+}
+let STORE = loadStore();
+if(!STORE.profile) STORE.profile = JSON.parse(JSON.stringify(DB.profile));
+if(!STORE.weights) STORE.weights = [];
+
+// include a starter weigh-in only when seeding the demo history for a new account
+function seedStarterWeight(){ if(!STORE.weights||!STORE.weights.length) STORE.weights=[{date:"2026-06-24", kg:96.6}]; }
+
+function entries(){ const base = STORE.seedImported ? [] : DB.entries; return base.concat(STORE.entries).slice().sort((a,b)=> a.date<b.date?-1:1); }
+function strengthEntries(){ return entries().filter(e=>e.kind==="strength"); }
+function cardioEntries(){ return entries().filter(e=>e.kind==="cardio"); }
+function foodEntries(){ const hidden=STORE.hiddenFood||[]; const base = STORE.seedImported ? [] : (DB.food||[]); return base.concat(STORE.food||[]).filter(f=>!hidden.includes(f._id)); }
+
+function fmt(n){ if(n===null||n===undefined) return "—"; return (Math.round(n*10)/10).toString(); }
+function fmt0(n){ return Math.round(n).toLocaleString(); }
+function fmtDate(d){ const [y,m,da]=d.split("-"); return `${da}/${m}`; }
+function pace(min){ const m=Math.floor(min); const s=Math.round((min-m)*60); return `${m}:${s.toString().padStart(2,'0')}`; }
+
+let toastTimer=null;
+function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"),2200); }
+
+/* ===================== STRENGTH ===================== */
+function isAssisted(name){ return /assisted/i.test(name); }
+function isBodyweight(sets){ return sets.every(s=> s.weight===0); }
+function hasLevels(sets){ return sets.some(s=> s.weight===null); }
+
+function sessionMetric(ex, metric){
+  const sets=ex.sets;
+  if(metric==="volume"){ let v=0,any=false; sets.forEach(s=>{ if(typeof s.weight==="number"&&s.weight>0){v+=s.reps*s.weight;any=true;} }); return any?v:null; }
+  const assisted=isAssisted(ex.name), bw=isBodyweight(sets), levels=hasLevels(sets);
+  if(metric==="topweight"){
+    if(assisted){ let b=null; sets.forEach(s=>{ if(typeof s.weight==="number"){ if(b===null||s.weight>b.weight||(s.weight===b.weight&&s.reps>b.reps)) b=s; } }); return b?b.weight:null; }
+    if(bw) return Math.max(...sets.map(s=>s.reps));
+    if(levels) return null;
+    let mx=null; sets.forEach(s=>{ if(typeof s.weight==="number"&&s.weight>0){ if(mx===null||s.weight>mx) mx=s.weight; } }); return mx;
+  }
+  if(assisted){ let b=null; sets.forEach(s=>{ if(typeof s.weight==="number"){ const sc=s.weight*(1+s.reps/30); if(b===null||sc>b) b=sc; } }); return b; }
+  if(bw) return Math.max(...sets.map(s=>s.reps));
+  if(levels) return null;
+  let b=null; sets.forEach(s=>{ if(typeof s.weight==="number"&&s.weight>0){ const sc=s.weight*(1+s.reps/30); if(b===null||sc>b) b=sc; } }); return b;
+}
+function exerciseSeries(name, metric){
+  const out=[]; strengthEntries().forEach(s=> s.exercises.forEach(ex=>{ if(ex.name===name){ const v=sessionMetric(ex,metric); if(v!==null&&v!==undefined) out.push({date:s.date,value:v}); } })); return out;
+}
+function exerciseList(){
+  const seen={}; strengthEntries().forEach(s=> s.exercises.forEach(e=>{ seen[e.name]=(seen[e.name]||0)+1; }));
+  return Object.keys(seen).sort((a,b)=>{ const ga=muscleOf(a),gb=muscleOf(b); if(ga!==gb) return ga<gb?-1:1; return a<b?-1:1; }).map(n=>({name:n,count:seen[n],muscle:muscleOf(n)}));
+}
+let CURRENT_EX="Bench Press", CURRENT_METRIC="e1rm", chart=null;
+
+function metricMeta(name){
+  const allSets=[]; strengthEntries().forEach(s=>s.exercises.forEach(e=>{ if(e.name===name) allSets.push(...e.sets); }));
+  const bw=allSets.length&&allSets.every(s=>s.weight===0); const levels=allSets.some(s=>s.weight===null);
+  return {assisted:isAssisted(name),bw,levels};
+}
+function buildStrip(){
+  const ss=strengthEntries(); const types={Push:0,Pull:0,Legs:0,Other:0}; let sets=0,vol=0;
+  ss.forEach(s=>{ types[s.type]=(types[s.type]||0)+1; s.exercises.forEach(e=>e.sets.forEach(st=>{ sets++; if(typeof st.weight==="number"&&st.weight>0) vol+=st.reps*st.weight; })); });
+  document.getElementById("strip").innerHTML=`
+    <div class="stat"><div class="k">Sessions</div><div class="v mono">${ss.length}</div></div>
+    <div class="stat"><div class="k">Working volume</div><div class="v mono">${(vol/1000).toFixed(1)}<small> t</small></div></div>
+    <div class="stat"><div class="k">Total sets</div><div class="v mono">${sets}</div></div>
+    <div class="stat"><div class="k">Push / Pull / Legs</div><div class="v mono" style="font-size:19px">${types.Push} · ${types.Pull} · ${types.Legs}</div></div>`;
+  const all=entries(); if(all.length) document.getElementById("dateRange").textContent=all[0].date+"  →  "+all[all.length-1].date;
+}
+function buildSelect(){
+  const sel=document.getElementById("exSelect"); const list=exerciseList(); let html="",lastG=null;
+  list.forEach(e=>{ if(e.muscle!==lastG){ if(lastG!==null) html+="</optgroup>"; html+=`<optgroup label="${e.muscle}">`; lastG=e.muscle; } html+=`<option value="${e.name.replace(/"/g,'&quot;')}">${e.name} (${e.count})</option>`; });
+  if(lastG!==null) html+="</optgroup>"; sel.innerHTML=html;
+  if(!list.find(e=>e.name===CURRENT_EX)&&list.length) CURRENT_EX=list[0].name; sel.value=CURRENT_EX;
+}
+function renderStrength(){
+  const meta=metricMeta(CURRENT_EX); const series=exerciseSeries(CURRENT_EX,CURRENT_METRIC);
+  document.getElementById("exName").textContent=CURRENT_EX;
+  document.getElementById("exTag").textContent=muscleOf(CURRENT_EX);
+  document.getElementById("histExName").textContent=CURRENT_EX;
+  let unit="kg",note="";
+  if(meta.assisted){ unit=""; note="Assistance load (kg). Less assistance = stronger — the line climbing toward zero is progress."; }
+  else if(meta.bw){ unit=" reps"; note="Bodyweight exercise — tracking reps in the top set."; }
+  else if(meta.levels&&CURRENT_METRIC!=="volume"){ note="Some sessions use machine levels, so only weighted sessions appear here."; }
+  if(CURRENT_METRIC==="volume"){ unit=" kg"; note="Total weighted volume (reps × weight, summed across sets)."; }
+  if(CURRENT_METRIC==="e1rm"&&!meta.assisted&&!meta.bw) note="Epley estimate from your best working set: weight × (1 + reps/30).";
+  if(CURRENT_METRIC==="topweight"&&meta.assisted) note="Least assistance used in a session (closer to 0 is stronger).";
+  document.getElementById("metricNote").textContent=note;
+  const dEl=document.getElementById("exDelta");
+  if(series.length>=2){ const a=series[0].value,b=series[series.length-1].value,diff=b-a;
+    const cls=diff>0.05?"up":diff<-0.05?"down":"flat"; const arrow=cls==="up"?"▲":cls==="down"?"▼":"●";
+    dEl.innerHTML=`<span class="${cls}">${arrow} ${diff>0?"+":""}${fmt(diff)}${unit}</span> <span style="color:var(--faint)">since start</span>`;
+  } else dEl.innerHTML=`<span class="flat">single session</span>`;
+  drawLine("mainChart", series, unit, meta);
+  buildHist(); buildPR();
+}
+function drawLine(canvasId, series, unit, meta){
+  const ctx=document.getElementById(canvasId); const labels=series.map(p=>fmtDate(p.date)); const vals=series.map(p=>p.value);
+  if(chart&&canvasId==="mainChart") chart.destroy();
+  const grad=ctx.getContext("2d").createLinearGradient(0,0,0,300);
+  grad.addColorStop(0,"rgba(245,166,35,0.22)"); grad.addColorStop(1,"rgba(245,166,35,0.01)");
+  let runMax=-Infinity; const prF=vals.map(v=>{ const p=v>runMax; if(v>runMax)runMax=v; return p; });
+  const c=new Chart(ctx,{type:"line",data:{labels,datasets:[{data:vals,borderColor:"#f5a623",backgroundColor:grad,fill:true,borderWidth:2.5,tension:0.28,
+    pointRadius:vals.map((v,i)=>prF[i]?5:3.5),pointBackgroundColor:vals.map((v,i)=>prF[i]?"#f5a623":"#1b1f28"),pointBorderColor:"#f5a623",pointBorderWidth:2,pointHoverRadius:6}]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:"index"},
+      plugins:{legend:{display:false},tooltip:{backgroundColor:"#0e1116",borderColor:"#2c323d",borderWidth:1,titleColor:"#e8eaed",bodyColor:"#f5a623",padding:11,displayColors:false,
+        titleFont:{family:"Inter",weight:"600",size:12},bodyFont:{family:"SF Mono, monospace",size:14,weight:"700"},
+        callbacks:{title:(it)=>series[it[0].dataIndex].date,label:(it)=>`${fmt(it.raw)}${unit}${prF[it.dataIndex]?"   ★ PR":""}`}}},
+      scales:{x:{grid:{color:"rgba(44,50,61,0.5)"},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10.5},maxRotation:0}},
+        y:{grid:{color:"rgba(44,50,61,0.5)"},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10.5}}}}}});
+  if(canvasId==="mainChart") chart=c;
+}
+function buildHist(){
+  const rows=[]; let runMax=-Infinity;
+  strengthEntries().forEach(s=>s.exercises.forEach(e=>{ if(e.name===CURRENT_EX){ const m=sessionMetric(e,"e1rm"); const pr=m!==null&&m>runMax; if(m!==null&&m>runMax)runMax=m; rows.push({date:s.date,sets:e.sets,e1:m,pr}); } }));
+  rows.reverse(); let html=`<tr><th>Date</th><th>Sets (reps × kg)</th><th class="r">e1RM</th></tr>`;
+  rows.forEach(r=>{ const pills=r.sets.map(st=>{ let w=st.weight===null?"lvl":st.weight===0?"BW":st.weight; return `<span class="setpill mono">${st.reps}×${w}</span>`; }).join("");
+    html+=`<tr><td class="mono" style="white-space:nowrap">${r.date}</td><td>${pills}</td><td class="r mono ${r.pr?'pr':''}">${r.e1===null?"—":fmt(r.e1)}${r.pr?" ★":""}</td></tr>`; });
+  document.getElementById("histTable").innerHTML=html;
+}
+function buildPR(){
+  const best={}; strengthEntries().forEach(s=>s.exercises.forEach(e=>{ const m=sessionMetric(e,"e1rm"); if(m===null) return;
+    if(!best[e.name]||m>best[e.name].val) best[e.name]={val:m,date:s.date,muscle:muscleOf(e.name),assisted:isAssisted(e.name),bw:isBodyweight(e.sets)}; }));
+  const arr=Object.keys(best).map(n=>({name:n,...best[n]})).filter(x=>!x.assisted&&!x.bw).sort((a,b)=>b.val-a.val).slice(0,10);
+  let html=`<tr><th>Exercise</th><th class="r">e1RM</th></tr>`;
+  arr.forEach(x=>{ html+=`<tr><td>${x.name}<div style="color:var(--faint);font-size:11px">${x.muscle} · ${x.date}</div></td><td class="r mono pr">${fmt(x.val)}<small style="color:var(--faint)"> kg</small></td></tr>`; });
+  document.getElementById("prTable").innerHTML=html;
+}
+
+/* ===================== CARDIO ===================== */
+let CARDIO_METRIC="pace", cardioChart=null;
+function buildCardio(){
+  const ce=cardioEntries();
+  let totDist=0,totTime=0,totCal=0; ce.forEach(c=>{ totDist+=c.distance_km||0; totTime+=c.duration_min||0; totCal+=c.calories||0; });
+  const bestPace=ce.length?Math.min(...ce.map(c=>c.pace_min_km||999)):0;
+  document.getElementById("cardioStrip").innerHTML=`
+    <div class="stat"><div class="k">Sessions</div><div class="v mono">${ce.length}</div></div>
+    <div class="stat"><div class="k">Total distance</div><div class="v mono">${totDist.toFixed(1)}<small> km</small></div></div>
+    <div class="stat"><div class="k">Best pace</div><div class="v mono">${ce.length?pace(bestPace):"—"}<small> /km</small></div></div>
+    <div class="stat"><div class="k">Calories burned</div><div class="v mono">${fmt0(totCal)}</div></div>`;
+  const series=ce.map(c=>({date:c.date, pace:c.pace_min_km, distance:c.distance_km, calories:c.calories}));
+  const vals=series.map(p=>p[CARDIO_METRIC]); const labels=series.map(p=>fmtDate(p.date));
+  const ctx=document.getElementById("cardioChart"); if(cardioChart) cardioChart.destroy();
+  const grad=ctx.getContext("2d").createLinearGradient(0,0,0,300); grad.addColorStop(0,"rgba(91,155,213,0.22)"); grad.addColorStop(1,"rgba(91,155,213,0.01)");
+  const invert = CARDIO_METRIC==="pace"; // lower pace is better
+  cardioChart=new Chart(ctx,{type:series.length===1?"bar":"line",data:{labels,datasets:[{data:vals,borderColor:"#5b9bd5",backgroundColor:series.length===1?"#5b9bd5":grad,fill:true,borderWidth:2.5,tension:0.28,pointRadius:4,pointBackgroundColor:"#5b9bd5",borderRadius:6,maxBarThickness:60}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:"#0e1116",borderColor:"#2c323d",borderWidth:1,titleColor:"#e8eaed",bodyColor:"#5b9bd5",padding:11,displayColors:false,
+      callbacks:{title:(it)=>series[it[0].dataIndex].date,label:(it)=> CARDIO_METRIC==="pace"?pace(it.raw)+" /km":CARDIO_METRIC==="distance"?it.raw+" km":fmt0(it.raw)+" kcal"}}},
+      scales:{x:{grid:{color:"rgba(44,50,61,0.5)"},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10.5},maxRotation:0}},
+        y:{reverse:invert,grid:{color:"rgba(44,50,61,0.5)"},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10.5},callback:v=>CARDIO_METRIC==="pace"?pace(v):v}}}}});
+  document.getElementById("cardioNote").textContent = CARDIO_METRIC==="pace"?"Pace per km — lower is faster, so down = improving (axis flipped so up = faster).":CARDIO_METRIC==="distance"?"Distance per session.":"Calories burned per session.";
+  // table
+  let html=`<tr><th>Date</th><th>Activity</th><th class="r">Dist</th><th class="r">Time</th><th class="r">Pace</th><th class="r">kcal</th></tr>`;
+  ce.slice().reverse().forEach(c=>{ html+=`<tr><td class="mono" style="white-space:nowrap">${c.date}</td><td>${c.activity}${c.note?`<div style="color:var(--faint);font-size:11px">${c.note}</div>`:""}</td>
+    <td class="r mono">${c.distance_km?c.distance_km.toFixed(2):"—"}</td><td class="r mono">${c.duration_min?pace(c.duration_min):"—"}</td>
+    <td class="r mono">${c.pace_min_km?pace(c.pace_min_km):"—"}</td><td class="r mono">${c.calories?fmt0(c.calories):"—"}</td></tr>`; });
+  document.getElementById("cardioTable").innerHTML=html;
+}
+
+/* ===================== CALORIES ===================== */
+let CAL_DAY=new Date().toISOString().slice(0,10);
+function profile(){ return STORE.profile; }
+function workoutBurnForDay(day){
+  let burn=0;
+  entries().forEach(e=>{ if(e.date!==day) return;
+    if(e.kind==="cardio") burn+=e.calories||0;
+    else if(e.kind==="strength") burn+=STRENGTH_BURN[e.type]||280; });
+  return burn;
+}
+function foodForDay(day){ return foodEntries().filter(f=>f.date===day); }
+function dayTotals(day){
+  const p=profile(); const maint=Math.round(p.bmr*parseFloat(p.activityMult||1.2));
+  const workout=workoutBurnForDay(day);
+  const foods=foodForDay(day); const intake=foods.reduce((a,f)=>a+(f.kcal||0),0);
+  const protein=foods.reduce((a,f)=>a+(f.p||0),0);
+  const out=maint+workout; const net=intake-out; // negative = deficit
+  return {maint,workout,out,intake,protein,net,foods};
+}
+function renderCalories(){
+  const p=profile();
+  if(!p.activityMult) p.activityMult=1.2;
+  document.getElementById("calDate").value=CAL_DAY;
+  const t=dayTotals(CAL_DAY);
+  document.getElementById("lMaint").textContent=fmt0(t.maint)+" kcal";
+  document.getElementById("lWorkout").textContent=(t.workout?"+":"")+fmt0(t.workout)+" kcal";
+  document.getElementById("lOut").textContent=fmt0(t.out)+" kcal";
+  document.getElementById("lIn").textContent=fmt0(t.intake)+" kcal";
+  const deficit=-t.net;
+  const lNet=document.getElementById("lNet");
+  lNet.textContent=(t.net<0?"−":"+")+fmt0(Math.abs(t.net))+" kcal";
+  lNet.style.color=t.net<0?"var(--green)":"var(--red)";
+
+  document.getElementById("netNum").innerHTML = (t.net<0?"−":"+")+fmt0(Math.abs(t.net))+`<small> kcal</small>`;
+  document.getElementById("netSub").textContent = t.intake===0 ? "No food logged yet for this day" : (t.net<0?`You're ${fmt0(Math.abs(t.net))} under — deficit ✓`:`You're ${fmt0(t.net)} over maintenance`);
+
+  // bar: food in vs total out
+  const maxv=Math.max(t.out,t.intake,1); const fill=document.getElementById("calFill");
+  const pct=Math.min(100,(t.intake/maxv)*100);
+  fill.style.width=pct+"%"; fill.style.background = t.intake<=t.out?"var(--green)":"var(--red)";
+  document.getElementById("barInLbl").textContent="in "+fmt0(t.intake);
+  document.getElementById("barOutLbl").textContent="out "+fmt0(t.out);
+
+  // verdict pill
+  const v=document.getElementById("calVerdict"); const target=p.deficit_target||400;
+  if(t.intake===0){ v.innerHTML=`<span class="verdict near">awaiting food</span>`; }
+  else if(deficit>=target){ v.innerHTML=`<span class="verdict deficit">on track · −${fmt0(deficit)}</span>`; }
+  else if(deficit>0){ v.innerHTML=`<span class="verdict near">mild deficit · −${fmt0(deficit)}</span>`; }
+  else { v.innerHTML=`<span class="verdict surplus">surplus · +${fmt0(-deficit)}</span>`; }
+
+  // protein calculator
+  if(!p.protein_per_kg) p.protein_per_kg=2.0;
+  const proTarget=Math.round(p.weight_kg*p.protein_per_kg);
+  const proEaten=Math.round(t.protein);
+  document.getElementById("proPerKg").value=String(p.protein_per_kg);
+  document.getElementById("proNum").innerHTML=`${proEaten}<small> / ${proTarget} g</small>`;
+  const proPct=Math.min(100,proTarget?proEaten/proTarget*100:0);
+  const pf=document.getElementById("proFill");
+  pf.style.width=proPct+"%";
+  pf.style.background = proEaten>=proTarget?"var(--green)":proEaten>=proTarget*0.8?"var(--amber)":"var(--blue)";
+  document.getElementById("proEaten").textContent=proEaten+"g eaten";
+  document.getElementById("proTarget").textContent=proTarget+"g target ("+p.protein_per_kg+" g/kg)";
+  const proGap=proTarget-proEaten;
+  if(t.protein===0) document.getElementById("proNote").textContent=`Aim for ${proTarget}g today to hold muscle while cutting — that's ${p.protein_per_kg} g per kg of bodyweight.`;
+  else if(proGap>0) document.getElementById("proNote").textContent=`${proGap}g to go. A chicken breast (~45g), Greek yogurt (~15g), or a scoop of whey (~25g) closes the gap.`;
+  else document.getElementById("proNote").textContent=`Target hit — ${proEaten}g logged. Good protein day for protecting muscle on a cut.`;
+
+  // food list
+  document.getElementById("foodDayLbl").textContent=fmtDate(CAL_DAY);
+  const fl=document.getElementById("foodList");
+  if(!t.foods.length){ fl.innerHTML=`<div style="color:var(--faint);font-size:13px;padding:8px 0">Nothing logged. Snap a meal photo in chat and I'll give you the numbers, or add manually below.</div>`; }
+  else{
+    fl.innerHTML=t.foods.map((f,i)=>`<div class="foodItem"><div><div style="font-weight:600">${f.name}</div>
+      <div class="macro">${f.p?`<span>P <b>${f.p}g</b></span>`:""}${f.c?`<span>C <b>${f.c}g</b></span>`:""}${f.fat?`<span>F <b>${f.fat}g</b></span>`:""}</div></div>
+      <div style="display:flex;align-items:center;gap:10px"><span class="mono" style="font-weight:700">${fmt0(f.kcal)}</span>
+      <button class="xBtn" data-fi="${f._id}">✕</button></div></div>`).join("");
+    fl.querySelectorAll("[data-fi]").forEach(b=> b.onclick=()=>{ removeFood(b.dataset.fi); });
+  }
+
+  // 7-day chart
+  drawWeek();
+  // weight trend
+  renderWeight();
+
+  // profile panel
+  document.getElementById("pStats").textContent=`${p.weight_kg} kg · ${p.height_cm} cm · ${p.age} y`;
+  document.getElementById("pBmr").textContent=fmt0(p.bmr)+" kcal";
+  document.getElementById("pMaint").textContent=fmt0(Math.round(p.bmr*parseFloat(p.activityMult)))+" kcal";
+  document.getElementById("pTarget").textContent="−"+fmt0(p.deficit_target||400)+" kcal";
+  document.getElementById("goalLbl").textContent=fmt0(p.deficit_target||400);
+  document.getElementById("pActivity").value=String(p.activityMult);
+}
+let weekChart=null;
+function drawWeek(){
+  const p=profile(); const target=p.deficit_target||400;
+  const days=[]; const base=new Date(CAL_DAY+"T00:00:00");
+  for(let i=6;i>=0;i--){ const d=new Date(base); d.setDate(d.getDate()-i); days.push(d.toISOString().slice(0,10)); }
+  const nets=days.map(d=>{ const t=dayTotals(d); return t.intake===0?null:t.net; });
+  const ctx=document.getElementById("weekChart"); if(weekChart) weekChart.destroy();
+  weekChart=new Chart(ctx,{type:"bar",data:{labels:days.map(fmtDate),datasets:[{data:nets.map(n=>n===null?0:n),
+    backgroundColor:nets.map(n=>n===null?"#2c323d":n<0?"#4ade80":"#e3604d"),borderRadius:5,maxBarThickness:34}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
+      tooltip:{backgroundColor:"#0e1116",borderColor:"#2c323d",borderWidth:1,padding:10,displayColors:false,
+        callbacks:{label:(it)=>{ const n=nets[it.dataIndex]; return n===null?"no food logged":(n<0?"−":"+")+fmt0(Math.abs(n))+" kcal"; }}},
+      annotation:false},
+      scales:{x:{grid:{display:false},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10}}},
+        y:{grid:{color:"rgba(44,50,61,0.5)"},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10}},
+          afterBuildTicks:(ax)=>{} }}}});
+}
+
+/* ---- weight tracking ---- */
+function weights(){ return (STORE.weights||[]).slice().sort((a,b)=> a.date<b.date?-1:1); }
+function rollingAvg(arr, idx, win){
+  // average of up to `win` points ending at idx
+  let s=0,n=0; for(let i=Math.max(0,idx-win+1);i<=idx;i++){ s+=arr[i].kg; n++; } return s/n;
+}
+let weightChart=null;
+function renderWeight(){
+  const w=weights();
+  const latestEl=document.getElementById("wLatest");
+  const rateEl=document.getElementById("wRate");
+  const subEl=document.getElementById("wRateSub");
+  if(!w.length){
+    latestEl.innerHTML=`—<small> kg</small>`;
+    rateEl.textContent=""; subEl.textContent="Log your morning weight to start the trend. Withings users: read the number off the app each morning.";
+    if(weightChart) weightChart.destroy();
+    const ctx=document.getElementById("weightChart");
+    weightChart=new Chart(ctx,{type:"line",data:{labels:[],datasets:[{data:[]}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+    return;
+  }
+  const last=w[w.length-1];
+  latestEl.innerHTML=`${last.kg.toFixed(1)}<small> kg</small>`;
+
+  // 7-day rolling average series
+  const avg=w.map((p,i)=>rollingAvg(w,i,7));
+  // weekly rate: compare current avg to avg ~7 days earlier (by index, best-effort)
+  let rate=null;
+  if(w.length>=2){
+    // find a point ~7 days before the last date
+    const lastDate=new Date(last.date+"T00:00:00");
+    let refIdx=0;
+    for(let i=0;i<w.length;i++){ const d=new Date(w[i].date+"T00:00:00"); if((lastDate-d)/86400000<=7){ refIdx=i; break; } }
+    const days=Math.max(1,(lastDate-new Date(w[refIdx].date+"T00:00:00"))/86400000);
+    const deltaAvg=avg[w.length-1]-avg[refIdx];
+    rate = days>0 ? deltaAvg/days*7 : null;  // kg per week
+  }
+  if(rate!==null && w.length>=3){
+    const down=rate<0;
+    rateEl.innerHTML=`<span style="color:${down?'var(--green)':'var(--red)'}">${rate>0?'+':''}${rate.toFixed(2)} kg/wk</span>`;
+    let msg;
+    const mag=Math.abs(rate);
+    if(down && mag>=0.3 && mag<=0.6) msg="In the ideal cut zone — fat loss with muscle spared.";
+    else if(down && mag<0.3) msg="Slow loss. Fine, or tighten the deficit slightly if you want it faster.";
+    else if(down && mag>0.6) msg="Fast loss — watch your lifts; if they dip, eat a bit more.";
+    else if(!down) msg="Trending up. If shredding is the goal, widen the deficit.";
+    subEl.textContent=msg+" (based on the 7-day average, not daily noise)";
+  } else {
+    rateEl.textContent="";
+    subEl.textContent=`${w.length} weigh-in${w.length>1?'s':''} logged — a few more days and the weekly rate appears.`;
+  }
+
+  // chart: faint daily points + bold rolling avg line
+  const labels=w.map(p=>fmtDate(p.date));
+  const ctx=document.getElementById("weightChart"); if(weightChart) weightChart.destroy();
+  weightChart=new Chart(ctx,{type:"line",data:{labels,datasets:[
+    {label:"Daily", data:w.map(p=>p.kg), borderColor:"rgba(139,147,161,0.25)", backgroundColor:"transparent",
+      borderWidth:1, pointRadius:2.5, pointBackgroundColor:"rgba(139,147,161,0.5)", pointBorderWidth:0, tension:0, order:2},
+    {label:"7-day avg", data:avg, borderColor:"#f5a623", backgroundColor:"transparent",
+      borderWidth:2.5, pointRadius:0, tension:0.3, order:1}
+  ]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:"index"},
+      plugins:{legend:{display:true, labels:{color:"#8b93a1", font:{size:11}, boxWidth:14, usePointStyle:true}},
+        tooltip:{backgroundColor:"#0e1116",borderColor:"#2c323d",borderWidth:1,padding:10,
+          callbacks:{label:(it)=>`${it.dataset.label}: ${it.raw.toFixed(1)} kg`}}},
+      scales:{x:{grid:{color:"rgba(44,50,61,0.4)"},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10},maxRotation:0,autoSkip:true,maxTicksLimit:8}},
+        y:{grid:{color:"rgba(44,50,61,0.5)"},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10},callback:v=>v+" kg"}}}}});
+}
+function saveWeight(){
+  const v=parseFloat(document.getElementById("wInput").value);
+  if(isNaN(v)||v<=0){ toast("Enter a weight in kg"); return; }
+  STORE.weights=STORE.weights||[];
+  // one entry per day — replace if same date exists
+  const existing=STORE.weights.find(x=>x.date===CAL_DAY);
+  if(existing) existing.kg=v; else STORE.weights.push({date:CAL_DAY, kg:v});
+  saveStore(STORE);
+  document.getElementById("wInput").value="";
+  toast("Weight logged ✓");
+  renderWeight();
+}
+
+function removeFood(id){
+  // custom food: remove outright. seed food: add to a hidden set so it disappears.
+  const before=(STORE.food||[]).length;
+  STORE.food=(STORE.food||[]).filter(f=>f._id!==id);
+  if((STORE.food||[]).length===before){
+    STORE.hiddenFood=STORE.hiddenFood||[]; if(!STORE.hiddenFood.includes(id)) STORE.hiddenFood.push(id);
+  }
+  saveStore(STORE); renderCalories(); toast("Removed");
+}
+
+/* ===================== FORMS ===================== */
+// strength add
+let exFormCount=0;
+function setRowHTML(i){ return `<div class="setRow"><span class="ix mono">Set ${i}</span>
+  <input type="number" class="sReps" placeholder="reps" min="0" step="1"><span style="color:var(--faint)">×</span>
+  <input type="number" class="sWeight" placeholder="kg" step="0.1"><button class="xBtn rmSet">✕</button></div>`; }
+function exBlockHTML(){ exFormCount++; return `<div class="exBlock">
+  <div class="frow" style="margin-bottom:10px"><div class="field" style="flex:1"><label>Exercise</label>
+  <input type="text" class="exName" list="exNames" placeholder="e.g. Bench Press"></div>
+  <button class="xBtn rmEx" title="Remove">✕</button></div><div class="setList"></div>
+  <button class="linkBtn addSet">+ Add set</button></div>`; }
+function addSetTo(block){ const list=block.querySelector(".setList"); const i=list.children.length+1;
+  const d=document.createElement("div"); d.innerHTML=setRowHTML(i); list.appendChild(d.firstElementChild);
+  block.querySelectorAll(".rmSet").forEach(b=> b.onclick=()=>{ b.closest(".setRow").remove(); }); }
+function addExBlock(){ const c=document.getElementById("exContainer"); const d=document.createElement("div"); d.innerHTML=exBlockHTML();
+  const block=d.firstElementChild; c.appendChild(block); block.querySelector(".addSet").onclick=()=>addSetTo(block);
+  block.querySelector(".rmEx").onclick=()=>block.remove(); addSetTo(block);addSetTo(block);addSetTo(block); }
+function resetStrengthForm(){ document.getElementById("exContainer").innerHTML=""; exFormCount=0;
+  document.getElementById("fDate").value=new Date().toISOString().slice(0,10); document.getElementById("fType").value="Push"; addExBlock(); }
+function saveStrength(){
+  const date=document.getElementById("fDate").value, type=document.getElementById("fType").value;
+  if(!date){ toast("Pick a date"); return; }
+  const exercises=[];
+  document.querySelectorAll("#exContainer .exBlock").forEach(block=>{
+    const name=block.querySelector(".exName").value.trim(); if(!name) return; const sets=[];
+    block.querySelectorAll(".setRow").forEach(row=>{ const reps=parseFloat(row.querySelector(".sReps").value); const wRaw=row.querySelector(".sWeight").value;
+      if(isNaN(reps)) return; let weight=wRaw===""?0:parseFloat(wRaw); if(isNaN(weight)) weight=0; sets.push({reps,weight}); });
+    if(sets.length) exercises.push({name,muscle:muscleOf(name),sets}); });
+  if(!exercises.length){ toast("Add at least one exercise"); return; }
+  STORE.entries.push({kind:"strength",date,type,exercises}); saveStore(STORE);
+  toast("Session saved ✓"); document.getElementById("addForm").classList.remove("open"); document.getElementById("toggleForm").textContent="+ Add session";
+  buildStrip(); buildSelect(); CURRENT_EX=exercises[0].name; document.getElementById("exSelect").value=CURRENT_EX; rebuildDatalist(); renderStrength();
+}
+// cardio add
+function saveCardioEntry(){
+  const date=document.getElementById("cDate").value, act=document.getElementById("cAct").value.trim()||"Run";
+  const dist=parseFloat(document.getElementById("cDist").value), time=parseFloat(document.getElementById("cTime").value), cal=parseFloat(document.getElementById("cCal").value);
+  if(!date){ toast("Pick a date"); return; }
+  const e={kind:"cardio",date,activity:act};
+  if(!isNaN(dist)) e.distance_km=dist; if(!isNaN(time)) e.duration_min=time;
+  if(!isNaN(dist)&&!isNaN(time)&&dist>0) e.pace_min_km=time/dist; if(!isNaN(cal)) e.calories=cal;
+  STORE.entries.push(e); saveStore(STORE); toast("Cardio saved ✓");
+  document.getElementById("cardioForm").classList.remove("open"); document.getElementById("toggleCardio").textContent="+ Add cardio";
+  buildCardio();
+}
+// food add
+function saveFoodEntry(){
+  const name=document.getElementById("foodName").value.trim(); const kcal=parseFloat(document.getElementById("foodKcal").value);
+  if(!name||isNaN(kcal)){ toast("Need a name and calories"); return; }
+  const f={_id:"f"+Date.now()+Math.random().toString(36).slice(2,6),date:CAL_DAY,name,kcal,
+    p:parseFloat(document.getElementById("foodP").value)||0,c:parseFloat(document.getElementById("foodC").value)||0,fat:parseFloat(document.getElementById("foodF").value)||0};
+  STORE.food=STORE.food||[]; STORE.food.push(f); saveStore(STORE);
+  ["foodName","foodKcal","foodP","foodC","foodF"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("foodForm").classList.remove("open"); document.getElementById("toggleFood").textContent="+ Add food";
+  toast("Food added ✓"); renderCalories();
+}
+
+function rebuildDatalist(){
+  const names=[...new Set(strengthEntries().flatMap(s=>s.exercises.map(e=>e.name)))].sort();
+  document.getElementById("exNames").innerHTML=names.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">`).join("");
+}
+
+/* ===================== EVENTS / INIT ===================== */
+document.querySelector(".tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
+  document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
+  const v=b.dataset.v; document.querySelectorAll(".view").forEach(x=>x.classList.remove("on"));
+  document.getElementById("view-"+v).classList.add("on");
+  const subs={strength:"e1RM progression",cardio:"pace & distance",calories:"deficit tracker"};
+  document.getElementById("subLabel").textContent=subs[v];
+  if(v==="cardio") buildCardio(); if(v==="calories") renderCalories();
+});
+document.getElementById("exSelect").addEventListener("change",e=>{ CURRENT_EX=e.target.value; renderStrength(); });
+document.getElementById("metricSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
+  document.querySelectorAll("#metricSeg button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); CURRENT_METRIC=b.dataset.m; renderStrength(); });
+document.getElementById("cardioSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
+  document.querySelectorAll("#cardioSeg button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); CARDIO_METRIC=b.dataset.m; buildCardio(); });
+
+document.getElementById("toggleForm").addEventListener("click",()=>{ const f=document.getElementById("addForm"); const open=f.classList.toggle("open");
+  document.getElementById("toggleForm").textContent=open?"Close":"+ Add session"; if(open&&!document.getElementById("exContainer").children.length) resetStrengthForm(); });
+document.getElementById("cancelBtn").addEventListener("click",()=>{ document.getElementById("addForm").classList.remove("open"); document.getElementById("toggleForm").textContent="+ Add session"; });
+document.getElementById("addExBtn").addEventListener("click",addExBlock);
+document.getElementById("saveBtn").addEventListener("click",saveStrength);
+
+document.getElementById("toggleCardio").addEventListener("click",()=>{ const f=document.getElementById("cardioForm"); const open=f.classList.toggle("open");
+  document.getElementById("toggleCardio").textContent=open?"Close":"+ Add cardio"; if(open) document.getElementById("cDate").value=new Date().toISOString().slice(0,10); });
+document.getElementById("cancelCardio").addEventListener("click",()=>{ document.getElementById("cardioForm").classList.remove("open"); document.getElementById("toggleCardio").textContent="+ Add cardio"; });
+document.getElementById("saveCardio").addEventListener("click",saveCardioEntry);
+
+document.getElementById("toggleFood").addEventListener("click",()=>{ const f=document.getElementById("foodForm"); const open=f.classList.toggle("open"); document.getElementById("toggleFood").textContent=open?"Close":"+ Add food"; });
+document.getElementById("cancelFood").addEventListener("click",()=>{ document.getElementById("foodForm").classList.remove("open"); document.getElementById("toggleFood").textContent="+ Add food"; });
+document.getElementById("saveFood").addEventListener("click",saveFoodEntry);
+
+document.getElementById("calDate").addEventListener("change",e=>{ CAL_DAY=e.target.value; renderCalories(); });
+document.getElementById("dayPrev").addEventListener("click",()=>{ const d=new Date(CAL_DAY+"T00:00:00"); d.setDate(d.getDate()-1); CAL_DAY=d.toISOString().slice(0,10); renderCalories(); });
+document.getElementById("dayNext").addEventListener("click",()=>{ const d=new Date(CAL_DAY+"T00:00:00"); d.setDate(d.getDate()+1); CAL_DAY=d.toISOString().slice(0,10); renderCalories(); });
+document.getElementById("dayToday").addEventListener("click",()=>{ CAL_DAY=new Date().toISOString().slice(0,10); renderCalories(); });
+document.getElementById("pActivity").addEventListener("change",e=>{ STORE.profile.activityMult=parseFloat(e.target.value); saveStore(STORE); renderCalories(); });
+document.getElementById("proPerKg").addEventListener("change",e=>{ STORE.profile.protein_per_kg=parseFloat(e.target.value); saveStore(STORE); renderCalories(); });
+document.getElementById("wSave").addEventListener("click",saveWeight);
+document.getElementById("wInput").addEventListener("keydown",e=>{ if(e.key==="Enter") saveWeight(); });
+
+// account modal
+const syncModal=document.getElementById("syncModal");
+document.getElementById("acctBtn").addEventListener("click",()=>{
+  const el=document.getElementById("syncStatus");
+  el.style.color="var(--muted)";
+  el.textContent=CURRENT_USER?("Signed in as "+(CURRENT_USER.email||CURRENT_USER.name)):"Not signed in";
+  syncModal.style.display="flex";
+});
+document.getElementById("syncClose").addEventListener("click",()=>{ syncModal.style.display="none"; });
+syncModal.addEventListener("click",e=>{ if(e.target===syncModal) syncModal.style.display="none"; });
+document.getElementById("syncPush").addEventListener("click",pushNow);
+document.getElementById("signOutBtn").addEventListener("click",()=>{
+  syncModal.style.display="none";
+  try{ google.accounts.id.disableAutoSelect(); }catch(e){}
+  requireSignIn();
+});
+
+rebuildDatalist();
+buildStrip();
+buildSelect();
+renderStrength();
+
+// Auth init: try to restore a session token, else show sign-in
+(function initAuth(){
+  const saved=sessionStorage.getItem("idtoken");
+  if(saved){
+    ID_TOKEN=saved;
+    try{ const p=JSON.parse(atob(saved.split(".")[1]));
+      // basic expiry check
+      if(p.exp && p.exp*1000>Date.now()){ CURRENT_USER={email:p.email,name:p.name||p.email}; showApp(); pullNow(); return; }
+    }catch(e){}
+  }
+  initGoogle();
+})();
+
+</script>
+</body>
+</html>

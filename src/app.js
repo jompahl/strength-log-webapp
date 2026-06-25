@@ -6,6 +6,12 @@ import coachJompahlUrl from "./assets/coaches/jompahl.jpg";
 
 const muscleOf = n => MUSCLE[n] || "Other";
 
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
+
 const COACHES = [
   { id:"tompahl", name:"Tompahl", label:"Coach Tompahl", initials:"CT", image:coachTompahlUrl },
   { id:"calgaro", name:"Calgaro", label:"Coach Calgaro", initials:"CC", image:coachCalgaroUrl },
@@ -419,7 +425,7 @@ function exerciseList(){
   const seen={}; strengthEntries().forEach(s=> s.exercises.forEach(e=>{ seen[e.name]=(seen[e.name]||0)+1; }));
   return Object.keys(seen).sort((a,b)=>{ const ga=muscleOf(a),gb=muscleOf(b); if(ga!==gb) return ga<gb?-1:1; return a<b?-1:1; }).map(n=>({name:n,count:seen[n],muscle:muscleOf(n)}));
 }
-let CURRENT_EX="Bench Press", CURRENT_METRIC="e1rm", chart=null;
+let CURRENT_EX="Bench Press", CURRENT_METRIC="topweight", chart=null;
 
 function metricMeta(name){
   const allSets=[]; strengthEntries().forEach(s=>s.exercises.forEach(e=>{ if(e.name===name) allSets.push(...e.sets); }));
@@ -434,7 +440,6 @@ function buildStrip(){
     <div class="stat"><div class="k">Working volume</div><div class="v mono">${(vol/1000).toFixed(1)}<small> t</small></div></div>
     <div class="stat"><div class="k">Total sets</div><div class="v mono">${sets}</div></div>
     <div class="stat"><div class="k">Push / Pull / Legs</div><div class="v mono" style="font-size:19px">${types.Push} · ${types.Pull} · ${types.Legs}</div></div>`;
-  const all=entries(); if(all.length) document.getElementById("dateRange").textContent=all[0].date+"  →  "+all[all.length-1].date;
 }
 function buildSelect(){
   const sel=document.getElementById("exSelect"); const list=exerciseList(); let html="",lastG=null;
@@ -647,6 +652,7 @@ function renderCalories(){
 
   // 7-day chart
   drawWeek();
+  drawProteinWeek();
   // weight trend
   renderWeight();
 
@@ -678,6 +684,24 @@ function drawWeek(){
       scales:{x:{grid:{display:false},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10}}},
         y:{grid:{color:"rgba(44,50,61,0.5)"},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10}},
           afterBuildTicks:(ax)=>{} }}}});
+}
+let proteinWeekChart=null;
+function drawProteinWeek(){
+  const p=profile();
+  const proTarget=Math.round((p.weight_kg||0)*(p.protein_per_kg||2));
+  const days=[];
+  for(let i=6;i>=0;i--) days.push(addLocalDays(CAL_DAY,-i));
+  const vals=days.map(d=>dayTotals(d).protein||0);
+  const ctx=document.getElementById("proteinWeekChart"); if(proteinWeekChart) proteinWeekChart.destroy();
+  proteinWeekChart=new Chart(ctx,{type:"bar",data:{labels:days.map(fmtDate),datasets:[{data:vals,
+    backgroundColor:vals.map(v=>v>=proTarget?"#4ade80":v>=proTarget*0.8?"#f5a623":"#5b9bd5"),
+    borderRadius:5,maxBarThickness:34}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
+      tooltip:{backgroundColor:"#0e1116",borderColor:"#2c323d",borderWidth:1,padding:10,displayColors:false,
+        callbacks:{label:(it)=>fmt0(it.raw)+"g protein"}}},
+      scales:{x:{grid:{display:false},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10}}},
+        y:{grid:{color:"rgba(44,50,61,0.5)"},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10},callback:v=>v+"g"},
+          suggestedMax:Math.max(proTarget, ...vals, 1)}}}});
 }
 
 /* ---- weight tracking ---- */
@@ -837,8 +861,6 @@ document.querySelector(".tabs").addEventListener("click",e=>{ const b=e.target.c
   document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
   const v=b.dataset.v; document.querySelectorAll(".view").forEach(x=>x.classList.remove("on"));
   document.getElementById("view-"+v).classList.add("on");
-  const subs={strength:"e1RM progression",cardio:"pace & distance",calories:"deficit tracker"};
-  document.getElementById("subLabel").textContent=subs[v];
   if(v==="cardio") buildCardio(); if(v==="calories") renderCalories();
 });
 document.getElementById("exSelect").addEventListener("change",e=>{ CURRENT_EX=e.target.value; renderStrength(); });

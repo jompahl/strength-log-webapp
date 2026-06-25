@@ -3,7 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#13161c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Strength Log">
 <title>Strength Log</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <link rel="stylesheet" href="/src/styles.css">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -26,9 +32,8 @@
 
 <div class="wrap" id="appWrap" style="display:none">
   <header class="top">
-    <div class="brand"><span class="dot"></span><h1>Strength Log</h1><span class="sub" id="subLabel">e1RM progression</span></div>
+    <div class="brand"><span class="dot"></span><h1>Strength Log</h1></div>
     <div style="display:flex; align-items:center; gap:12px">
-      <span class="range mono" id="dateRange"></span>
       <button class="ghost" id="acctBtn" style="padding:7px 13px; font-size:12.5px">Account</button>
     </div>
   </header>
@@ -132,8 +137,8 @@
     <div class="controls">
       <div class="selWrap"><select id="exSelect"></select></div>
       <div class="seg" id="metricSeg">
-        <button data-m="e1rm" class="on">Est. 1RM</button>
-        <button data-m="topweight">Top set</button>
+        <button data-m="e1rm">Est. 1RM</button>
+        <button data-m="topweight" class="on">Top set</button>
         <button data-m="volume">Volume</button>
       </div>
     </div>
@@ -265,6 +270,9 @@
         <h3>7-day trend</h3>
         <div class="chartBox" style="height:200px"><canvas id="weekChart"></canvas></div>
         <div class="miniNote">Green bars = deficit day, red = surplus. Goal line at −<span id="goalLbl"></span> kcal.</div>
+        <h3 style="margin-top:18px">7-day protein</h3>
+        <div class="chartBox" style="height:200px"><canvas id="proteinWeekChart"></canvas></div>
+        <div class="miniNote">Protein logged per day. Goal line follows your current protein target.</div>
       </div>
     </div>
 

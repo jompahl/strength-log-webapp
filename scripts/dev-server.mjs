@@ -18,7 +18,6 @@ const apiHandlers = {
 const vite = await createViteServer({
   server: { middlewareMode: true },
   appType: 'spa',
-  publicDir: false,
 });
 
 const server = http.createServer(async (req, res) => {

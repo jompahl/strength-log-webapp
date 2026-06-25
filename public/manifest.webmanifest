@@ -1,0 +1,25 @@
+{
+  "name": "Strength Log",
+  "short_name": "Strength Log",
+  "description": "Track strength, cardio, nutrition, and progress with Coach Jompahl.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#13161c",
+  "theme_color": "#13161c",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

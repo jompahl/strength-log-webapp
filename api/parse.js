@@ -105,3 +105,6 @@ module.exports = async (req, res) => {
     return res.status(500).json({ ok: false, error: String(e.message || e) });
   }
 };
+
+// Give the function headroom for image analysis (Vercel default can be as low as 10s).
+module.exports.config = { maxDuration: 60 };

@@ -7,6 +7,57 @@ You set this up **once**. Friends do nothing but sign in.
 
 ---
 
+## Local development
+
+Install dependencies once:
+
+```bash
+npm install
+```
+
+Run the app locally:
+
+```bash
+npm run dev
+```
+
+This runs a local dev server at `http://localhost:3000` with both the frontend
+and the `/api/*` functions. To sync to the real Sheet locally, create
+`.env.local` with the same values you use in Vercel:
+
+```bash
+cp .env.example .env.local
+```
+
+Then fill in:
+
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_SA_EMAIL`
+- `GOOGLE_SA_KEY`
+- `SHEET_ID`
+- `ANTHROPIC_API_KEY` if you also want local AI/photo parsing
+
+In Google Cloud Console, your OAuth client must include this authorized
+JavaScript origin:
+
+```text
+http://localhost:3000
+```
+
+If `/api/config` is unavailable, the sign-in screen falls back to **Continue
+locally** so you can still work on UI without Google sync or AI calls.
+
+Build the production bundle:
+
+```bash
+npm run build
+```
+
+The frontend now uses Vite. The serverless functions still live in `api/`, and
+Vercel can deploy them alongside the built frontend.
+
+---
+
 ## How it works (the short version)
 
 - The app is hosted on **Vercel** (free) at a URL you share.

@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Strength Log</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/src/styles.css">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+<div id="signinOverlay" style="position:fixed; inset:0; background:var(--bg); z-index:100; display:flex; align-items:center; justify-content:center; padding:24px">
+  <div style="max-width:400px; width:100%; text-align:center">
+    <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:8px">
+      <span style="width:11px; height:11px; border-radius:50%; background:var(--amber); box-shadow:0 0 12px var(--amber)"></span>
+      <h1 style="font-size:24px; font-weight:800; letter-spacing:-0.02em">Strength Log</h1>
+    </div>
+    <p style="color:var(--muted); font-size:14px; margin-bottom:26px">Track strength, cardio, and your cut — synced to your account.</p>
+    <div id="gsiButton" style="display:flex; justify-content:center; margin-bottom:18px"></div>
+    <div id="signinMsg" style="color:var(--faint); font-size:12.5px; min-height:18px"></div>
+    <p style="color:var(--faint); font-size:11.5px; margin-top:24px; line-height:1.6">
+      Signing in shares only your name and email so your data is saved to your own space. Your friend who set this up can see the shared data sheet.
+    </p>
+  </div>
+</div>
+
+<div class="wrap" id="appWrap" style="display:none">
+  <header class="top">
+    <div class="brand"><span class="dot"></span><h1>Strength Log</h1><span class="sub" id="subLabel">e1RM progression</span></div>
+    <div style="display:flex; align-items:center; gap:12px">
+      <span class="range mono" id="dateRange"></span>
+      <button class="ghost" id="acctBtn" style="padding:7px 13px; font-size:12.5px">Account</button>
+    </div>
+  </header>
+
+  <div id="syncModal" style="display:none; position:fixed; inset:0; background:rgba(8,10,14,0.7); z-index:60; align-items:center; justify-content:center; padding:20px">
+    <div style="background:var(--panel); border:1px solid var(--line); border-radius:14px; max-width:420px; width:100%; padding:22px">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px">
+        <h2 style="font-size:17px; font-weight:750">Account</h2>
+        <button class="xBtn" id="syncClose" style="font-size:20px">✕</button>
+      </div>
+      <div id="syncStatus" style="font-size:13px; margin-bottom:14px; padding:10px 12px; border-radius:8px; background:var(--panel2)"></div>
+      <div style="border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:14px; background:var(--panel2)">
+        <div style="font-size:11px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px">Personal info</div>
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:8px">
+          <div class="field"><label>Weight</label><input id="acctWeight" type="number" step="0.1" style="width:100%"></div>
+          <div class="field"><label>Height</label><input id="acctHeight" type="number" step="1" style="width:100%"></div>
+          <div class="field"><label>Age</label><input id="acctAge" type="number" step="1" style="width:100%"></div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px">
+          <div class="field"><label>Activity</label><select id="acctActivity" style="padding:8px 28px 8px 10px; font-size:12.5px">
+            <option value="1.2">Sedentary</option>
+            <option value="1.375">Lightly active</option>
+            <option value="1.55">Moderately active</option>
+            <option value="1.725">Very active</option>
+          </select></div>
+          <div class="field"><label>Target weight</label><input id="acctTarget" type="number" step="0.1" style="width:100%"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; gap:10px; align-items:center">
+          <div id="acctProfileMsg" class="hint" style="margin:0; min-height:18px"></div>
+          <button class="ghost" id="acctProfileSave">Save info</button>
+        </div>
+      </div>
+      <div style="border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:14px; background:var(--panel2)">
+        <div style="font-size:11px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px">AI usage</div>
+        <div id="aiUsageStatus" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:12.5px"></div>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap">
+        <button class="ghost" id="syncPush">Sync now</button>
+        <button class="ghost" id="importBtn">Import data…</button>
+        <button class="ghost" id="signOutBtn" style="margin-left:auto">Sign out</button>
+      </div>
+      <div id="importBox" style="display:none; margin-top:14px">
+        <div class="field" style="margin-bottom:8px">
+          <label>Paste exported JSON (from your old sheet's Data cell)</label>
+          <textarea id="importText" placeholder='{"entries":[...],"food":[...],"weights":[...],...}' style="width:100%; min-height:120px; background:var(--panel2); border:1px solid var(--line); border-radius:8px; color:var(--ink); padding:10px; font-size:12px; font-family:ui-monospace,monospace"></textarea>
+        </div>
+        <div style="display:flex; gap:10px; justify-content:flex-end">
+          <button class="ghost" id="importCancel">Cancel</button>
+          <button class="primary" id="importConfirm">Load &amp; save to my account</button>
+        </div>
+        <div class="hint" style="margin-top:8px">This replaces your current data with the pasted data, then saves it to your account.</div>
+      </div>
+      <div class="hint" style="margin-top:14px; line-height:1.6">
+        Your data saves automatically a moment after each change, and loads when you sign in on any device.
+      </div>
+    </div>
+  </div>
+
+  <div id="welcomeModal" style="display:none; position:fixed; inset:0; background:rgba(8,10,14,0.78); z-index:90; align-items:center; justify-content:center; padding:20px">
+    <div style="background:var(--panel); border:1px solid var(--line); border-radius:14px; max-width:520px; width:100%; padding:22px">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px">
+        <span style="width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 10px var(--amber)"></span>
+        <h2 style="font-size:18px; font-weight:800">Welcome to Strength Log</h2>
+      </div>
+      <p style="color:var(--muted); font-size:13px; line-height:1.6; margin-bottom:16px">
+        Set your starting numbers and goal. The coach uses this to fill the calories tab with maintenance, protein, and daily target numbers.
+      </p>
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:12px">
+        <div class="field"><label>Weight (kg)</label><input id="welcomeWeight" type="number" min="30" max="250" step="0.1" placeholder="82"></div>
+        <div class="field"><label>Height (cm)</label><input id="welcomeHeight" type="number" min="120" max="230" step="1" placeholder="180"></div>
+        <div class="field"><label>Age</label><input id="welcomeAge" type="number" min="13" max="100" step="1" placeholder="32"></div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px">
+        <div class="field">
+          <label>Activity level</label>
+          <select id="welcomeActivity">
+            <option value="1.2">Sedentary (desk)</option>
+            <option value="1.375">Lightly active</option>
+            <option value="1.55">Moderately active</option>
+            <option value="1.725">Very active</option>
+          </select>
+        </div>
+        <div class="field"><label>Target weight (kg)</label><input id="welcomeTarget" type="number" min="30" max="250" step="0.1" placeholder="78"></div>
+      </div>
+      <div id="welcomeError" class="hint" style="color:var(--red); min-height:18px; margin-bottom:10px"></div>
+      <div style="display:flex; justify-content:flex-end; gap:10px">
+        <button class="primary" id="welcomeSave">Start tracking</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button data-v="strength" class="on">Strength</button>
+    <button data-v="cardio">Cardio</button>
+    <button data-v="calories">Calories</button>
+  </div>
+
+  <!-- STRENGTH VIEW -->
+  <div class="view on" id="view-strength">
+    <div class="strip" id="strip"></div>
+    <div class="controls">
+      <div class="selWrap"><select id="exSelect"></select></div>
+      <div class="seg" id="metricSeg">
+        <button data-m="e1rm" class="on">Est. 1RM</button>
+        <button data-m="topweight">Top set</button>
+        <button data-m="volume">Volume</button>
+      </div>
+    </div>
+    <div class="exHead">
+      <div><span class="name" id="exName"></span><span class="tag" id="exTag"></span></div>
+      <div class="delta mono" id="exDelta"></div>
+    </div>
+    <div class="card"><div class="chartBox"><canvas id="mainChart"></canvas></div><div class="miniNote" id="metricNote"></div></div>
+    <div class="twocol">
+      <div class="panel"><h3>Session history — <span id="histExName"></span></h3>
+        <div style="overflow-x:auto"><table id="histTable"></table></div></div>
+      <div class="panel"><h3>Personal records</h3><table id="prTable"></table></div>
+    </div>
+    <div class="addBar"><h2>Log a session</h2><button class="ghost" id="toggleForm">+ Add session</button></div>
+    <div class="form" id="addForm">
+      <div class="frow">
+        <div class="field"><label>Date</label><input type="date" id="fDate"></div>
+        <div class="field"><label>Type</label>
+          <select id="fType" style="padding:9px 30px 9px 11px; min-width:120px">
+            <option>Push</option><option>Pull</option><option>Legs</option><option>Other</option></select></div>
+      </div>
+      <div id="exContainer"></div>
+      <button class="linkBtn" id="addExBtn">+ Add exercise</button>
+      <div class="formActions"><button class="ghost" id="cancelBtn">Cancel</button><button class="primary" id="saveBtn">Save session</button></div>
+      <div class="hint">Saved on this device. Weights in kg. Assisted exercises: enter assistance as a negative number (e.g. -40).</div>
+    </div>
+  </div>
+
+  <!-- CARDIO VIEW -->
+  <div class="view" id="view-cardio">
+    <div class="strip" id="cardioStrip"></div>
+    <div class="controls">
+      <div class="selWrap" style="max-width:220px"><select id="cardioActSelect"></select></div>
+      <div class="seg" id="cardioSeg">
+        <button data-m="pace" class="on">Pace</button>
+        <button data-m="distance">Distance</button>
+        <button data-m="calories">Calories</button>
+      </div>
+    </div>
+    <div class="card"><div class="chartBox"><canvas id="cardioChart"></canvas></div><div class="miniNote" id="cardioNote"></div></div>
+    <div class="panel"><h3>Cardio history</h3><div style="overflow-x:auto"><table id="cardioTable"></table></div></div>
+    <div class="addBar"><h2>Log cardio</h2><button class="ghost" id="toggleCardio">+ Add cardio</button></div>
+    <div class="form" id="cardioForm">
+      <div class="frow">
+        <div class="field"><label>Date</label><input type="date" id="cDate"></div>
+        <div class="field"><label>Activity</label><input type="text" id="cAct" list="actNames" placeholder="Run" value="Run"></div>
+        <div class="field"><label>Distance (km)</label><input type="number" id="cDist" step="0.01" placeholder="8.01"></div>
+        <div class="field"><label>Time (min)</label><input type="number" id="cTime" step="0.1" placeholder="36.7"></div>
+        <div class="field"><label>Calories</label><input type="number" id="cCal" step="1" placeholder="818"></div>
+      </div>
+      <div class="formActions"><button class="ghost" id="cancelCardio">Cancel</button><button class="primary" id="saveCardio">Save cardio</button></div>
+      <div class="hint">Pace is calculated automatically from distance and time.</div>
+    </div>
+  </div>
+
+  <!-- CALORIES VIEW -->
+  <div class="view" id="view-calories">
+    <div class="daySelect">
+      <button class="ghost" id="dayPrev">‹</button>
+      <input type="date" id="calDate">
+      <button class="ghost" id="dayNext">›</button>
+      <button class="ghost" id="dayToday">Today</button>
+      <span id="calVerdict"></span>
+    </div>
+
+    <div class="card">
+      <div class="ledger">
+        <div>
+          <div style="color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:0.08em; font-weight:600; margin-bottom:8px">Net for the day</div>
+          <div class="bigNum mono" id="netNum"></div>
+          <div style="margin-top:6px; color:var(--faint); font-size:12.5px" id="netSub"></div>
+          <div class="calBar" style="margin-top:14px"><div class="fill" id="calFill"></div></div>
+          <div style="display:flex; justify-content:space-between; margin-top:6px; font-size:10.5px; color:var(--faint)">
+            <span id="barInLbl"></span><span id="barOutLbl"></span></div>
+        </div>
+        <div>
+          <div class="rowline"><span class="lbl">Resting burn (BMR×activity)</span><span class="val mono" id="lMaint"></span></div>
+          <div class="rowline"><span class="lbl">Workout burn</span><span class="val mono" id="lWorkout"></span></div>
+          <div class="rowline"><span class="lbl">Total out</span><span class="val mono" id="lOut"></span></div>
+          <div class="rowline"><span class="lbl">Food in</span><span class="val mono" id="lIn"></span></div>
+          <div class="rowline" style="border-top:2px solid var(--line)"><span class="lbl" style="color:var(--ink);font-weight:700">Deficit / surplus</span><span class="val mono" id="lNet"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:12px">
+        <div>
+          <div style="color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:0.08em; font-weight:600">Protein</div>
+          <div class="bigNum mono" id="proNum" style="font-size:30px; margin-top:4px"></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px">
+          <span style="color:var(--faint); font-size:12px">Target</span>
+          <select id="proPerKg" style="padding:7px 28px 7px 11px; font-size:13px">
+            <option value="1.6">1.6 g/kg · maintain</option>
+            <option value="1.8">1.8 g/kg · lean gain</option>
+            <option value="2.0" selected>2.0 g/kg · cut + build</option>
+            <option value="2.2">2.2 g/kg · aggressive cut</option>
+          </select>
+        </div>
+      </div>
+      <div class="calBar"><div class="fill" id="proFill"></div></div>
+      <div style="display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:var(--faint)">
+        <span id="proEaten"></span><span id="proTarget"></span>
+      </div>
+      <div class="miniNote" id="proNote"></div>
+    </div>
+
+    <div class="twocol">
+      <div class="panel">
+        <h3>Food log — <span id="foodDayLbl"></span></h3>
+        <div id="foodList"></div>
+        <div class="addBar" style="margin-top:14px"><span></span><button class="ghost" id="toggleFood">+ Add food</button></div>
+        <div class="form" id="foodForm" style="margin-top:12px; padding:14px">
+          <div class="frow">
+            <div class="field"><label>Item</label><input type="text" id="foodName" placeholder="Chicken & rice bowl"></div>
+            <div class="field"><label>Calories</label><input type="number" id="foodKcal" step="1" placeholder="650"></div>
+          </div>
+          <div class="frow">
+            <div class="field"><label>Protein (g)</label><input type="number" id="foodP" step="1" placeholder="45"></div>
+            <div class="field"><label>Carbs (g)</label><input type="number" id="foodC" step="1" placeholder="60"></div>
+            <div class="field"><label>Fat (g)</label><input type="number" id="foodF" step="1" placeholder="18"></div>
+          </div>
+          <div class="formActions"><button class="ghost" id="cancelFood">Cancel</button><button class="primary" id="saveFood">Add</button></div>
+          <div class="hint">Snap a photo of your meal in chat — I'll estimate calories + macros and give you the numbers to drop in here.</div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>7-day trend</h3>
+        <div class="chartBox" style="height:200px"><canvas id="weekChart"></canvas></div>
+        <div class="miniNote">Green bars = deficit day, red = surplus. Goal line at −<span id="goalLbl"></span> kcal.</div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:18px">
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:14px">
+        <div>
+          <h3 style="margin-bottom:6px">Weight trend</h3>
+          <div style="display:flex; align-items:baseline; gap:14px">
+            <div><span class="bigNum mono" id="wLatest" style="font-size:30px"></span></div>
+            <div class="mono" id="wRate" style="font-size:14px; font-weight:700"></div>
+          </div>
+          <div style="color:var(--faint); font-size:12px; margin-top:3px" id="wRateSub"></div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:flex-end">
+          <div class="field"><label>Morning weight (kg)</label>
+            <input type="number" id="wInput" step="0.1" placeholder="96.6" style="width:110px"></div>
+          <button class="primary" id="wSave">Log</button>
+        </div>
+      </div>
+      <div class="chartBox" style="height:240px"><canvas id="weightChart"></canvas></div>
+      <div class="miniNote">Faint dots = daily weigh-ins (they bounce ±1–2 kg from water/food — that's normal). The solid line is your 7-day average — the real signal. Aim for ~0.3–0.5 kg/week down.</div>
+    </div>
+
+    <div class="panel" style="margin-top:18px">
+      <h3>Your numbers</h3>
+      <div class="rowline"><span class="lbl">Weight / Height / Age</span><span class="val mono" id="pStats"></span></div>
+      <div class="rowline"><span class="lbl">BMR (Mifflin-St Jeor)</span><span class="val mono" id="pBmr"></span></div>
+      <div class="rowline"><span class="lbl">Activity level</span>
+        <span class="val"><select id="pActivity" style="padding:6px 26px 6px 10px; font-size:12.5px">
+          <option value="1.2">Sedentary (desk)</option>
+          <option value="1.375">Lightly active (walking pad)</option>
+          <option value="1.55">Moderately active</option>
+          <option value="1.725">Very active</option>
+        </select></span></div>
+      <div class="rowline"><span class="lbl">Maintenance (resting + activity)</span><span class="val mono" id="pMaint"></span></div>
+      <div class="rowline"><span class="lbl">Daily target</span><span class="val mono" id="pTarget"></span></div>
+      <div class="hint" id="pGoalHint" style="margin-top:8px">Your target updates from your onboarding goal. On training days you can eat more because workout burn raises your total out.</div>
+    </div>
+  </div>
+</div>
+
+<datalist id="exNames"></datalist>
+<datalist id="actNames"><option value="Run"><option value="Walk"><option value="Cycle"><option value="Row"><option value="Swim"></datalist>
+<div class="toast" id="toast"></div>
+
+<!-- Floating coach button -->
+<button id="coachFab" style="display:none; position:fixed; bottom:22px; right:22px; z-index:70;
+  width:58px; height:58px; border-radius:50%; border:none; cursor:pointer;
+  background:var(--amber); color:#1a1205; font-size:24px; box-shadow:0 6px 24px rgba(0,0,0,0.4);
+  transition:transform .15s">💬</button>
+
+<!-- Chat overlay -->
+<div id="coachOverlay" style="display:none; position:fixed; inset:0; z-index:80;
+  background:rgba(10,12,16,0.6); backdrop-filter:blur(7px); -webkit-backdrop-filter:blur(7px);
+  align-items:flex-end; justify-content:center;">
+  <div style="background:var(--panel); border:1px solid var(--line); border-radius:16px 16px 0 0;
+    width:100%; max-width:680px; height:86vh; display:flex; flex-direction:column; box-shadow:0 -10px 40px rgba(0,0,0,0.5)">
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid var(--line)">
+      <div style="display:flex; align-items:center; gap:10px; min-width:0">
+        <div class="coachAvatar" id="coachHeaderAvatar"></div>
+        <div>
+          <strong id="coachHeaderName" style="font-size:15px; display:block">Coach Jompahl</strong>
+          <span style="color:var(--faint); font-size:12px">logs & advises with your data</span>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px">
+        <div class="coachPicker" id="coachPicker" aria-label="Choose coach"></div>
+        <button class="xBtn" id="coachClose" style="font-size:22px">✕</button>
+      </div>
+    </div>
+    <div id="chatThread" style="flex:1; overflow-y:auto; padding:18px; display:flex; flex-direction:column; gap:12px"></div>
+    <div id="chatPreviewWrap" style="display:none; align-items:center; gap:10px; padding:0 18px 8px">
+      <img id="chatPreview" style="height:42px; border-radius:6px; border:1px solid var(--line)">
+      <span id="chatPhotoName" style="color:var(--muted); font-size:12px"></span>
+      <button class="xBtn" id="chatPhotoClear" style="font-size:15px">✕</button>
+    </div>
+    <div style="display:flex; gap:8px; align-items:center; padding:14px 18px; border-top:1px solid var(--line)">
+      <input type="file" id="chatPhoto" accept="image/*" style="display:none">
+      <button class="ghost" id="chatPhotoBtn" title="Add a food photo" style="padding:11px 13px">📷</button>
+      <input type="text" id="chatText" placeholder="Log something or ask for advice…"
+        style="flex:1; background:var(--panel2); border:1px solid var(--line); border-radius:22px; color:var(--ink); padding:12px 16px; font-size:14px">
+      <button class="primary" id="chatSend" style="padding:11px 18px; border-radius:22px">Send</button>
+    </div>
+  </div>
+</div>
+
+
+<script type="module" src="/src/app.js"></script>
+</body>
+</html>

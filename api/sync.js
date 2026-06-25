@@ -116,6 +116,14 @@ async function mirror(sheets, user, data) {
     rows.push(['Type', 'Date', 'Detail', 'A', 'B', 'C']);
     (data.weights || []).forEach(w => rows.push(['Weight', w.date, '', w.kg, '', '']));
     (data.food || []).forEach(f => rows.push(['Food', f.date, f.name, f.kcal, f.p || 0, '']));
+    (data.aiUsage || []).forEach(u => rows.push([
+      'AI Usage',
+      (u.createdAt || '').slice(0, 10),
+      `${u.provider || ''} ${u.model || ''} ${u.requestType || ''}`.trim(),
+      u.inputTokens || 0,
+      u.outputTokens || 0,
+      u.totalTokens || ((u.inputTokens || 0) + (u.outputTokens || 0)),
+    ]));
     (data.entries || []).forEach(en => {
       if (en.kind === 'cardio') rows.push(['Cardio', en.date, en.activity || '', en.distance_km || '', en.duration_min || '', en.calories || '']);
       else if (en.kind === 'strength') en.exercises.forEach(ex => ex.sets.forEach((s, i) =>

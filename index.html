@@ -77,13 +77,14 @@
       </div>
       <div id="importBox" style="display:none; margin-top:14px">
         <div class="field" style="margin-bottom:10px">
-          <label>Import workout-history CSV</label>
-          <input id="workoutCsvFile" type="file" accept=".csv,text/csv" style="width:100%; margin-top:5px; font-size:12px">
+          <label>Import workout-history file</label>
+          <input id="workoutCsvFile" type="file" accept=".csv,.tsv,.json,.txt,text/csv,text/tab-separated-values,application/json,text/plain" style="width:100%; margin-top:5px; font-size:12px">
         </div>
-        <div style="display:flex; gap:10px; justify-content:flex-end; margin-bottom:12px">
-          <button class="primary" id="workoutCsvConfirm">Import workout history</button>
+        <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; margin-bottom:12px">
+          <button class="ghost" id="workoutAiConfirm">Use AI for another format</button>
+          <button class="primary" id="workoutCsvConfirm">Import standard CSV</button>
         </div>
-        <div class="hint" style="margin:-4px 0 12px; line-height:1.5">Adds workouts to your account. Importing the same file again will not duplicate them.</div>
+        <div class="hint" style="margin:-4px 0 12px; line-height:1.5">Standard CSV is fastest. AI import sends the selected file for conversion and supports other CSV, TSV, JSON, or TXT exports up to 250 KB. Imports add missing workouts without replacing existing history.</div>
         <div style="height:1px; background:var(--line); margin-bottom:12px"></div>
         <div class="field" style="margin-bottom:8px">
           <label>Or paste legacy JSON (from your old sheet's Data cell)</label>

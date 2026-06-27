@@ -42,6 +42,10 @@ function durationSeconds(value) {
 
 function booleanValue(value) { return String(value).toLowerCase() === "true"; }
 
+function plainText(value, maxLength = 160) {
+  return String(value || "").replace(/[<>&\u0000-\u001F]/g, "").trim().slice(0, maxLength);
+}
+
 function inferWorkoutType(name) {
   const title = String(name || "").toLowerCase();
   if (/posterior|quad|glute|\bleg/.test(title)) return "Legs";
@@ -74,7 +78,7 @@ export function parseWorkoutCsv(text) {
   records.forEach(record => {
     const start = numberOrNull(record.start);
     const date = localDateFromMillis(start);
-    const exercise = String(record.exercise || "").trim();
+    const exercise = plainText(record.exercise, 120);
     const reps = numberOrNull(record.reps);
     const duration = durationSeconds(record.time);
     if (!start || !date || !exercise || (reps === null && duration === null)) { skippedRows++; return; }
@@ -87,7 +91,7 @@ export function parseWorkoutCsv(text) {
     if (booleanValue(record.warmup)) set.warmup = true;
     if (booleanValue(record.max)) set.max = true;
     if (booleanValue(record.fail)) set.fail = true;
-    const comment = String(record.setComment || "").trim();
+    const comment = plainText(record.setComment, 500);
     if (comment) set.note = comment;
     group.exercises.get(exercise).push(set);
   });
@@ -98,14 +102,14 @@ export function parseWorkoutCsv(text) {
       kind: "strength",
       date: group.date,
       type: inferWorkoutType(source.workout),
-      name: String(source.workout || "Imported workout").trim(),
+      name: plainText(source.workout || "Imported workout"),
       importId: `workout-csv:${start}`,
       startedAt: Number(start),
       exercises: [...group.exercises.entries()].map(([name, sets]) => ({ name, sets })),
     };
     const end = numberOrNull(source.end);
     if (end !== null) entry.endedAt = end;
-    const note = String(source.workoutComment || "").trim();
+    const note = plainText(source.workoutComment, 500);
     if (note) entry.note = note;
     return entry;
   });

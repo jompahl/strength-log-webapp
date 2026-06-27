@@ -13,6 +13,7 @@ const apiHandlers = {
   '/api/config': require('../api/config.js'),
   '/api/sync': require('../api/sync.js'),
   '/api/parse': require('../api/parse.js'),
+  '/api/import-workouts': require('../api/import-workouts.js'),
 };
 
 const vite = await createViteServer({

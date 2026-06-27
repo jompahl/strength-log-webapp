@@ -1311,6 +1311,48 @@ document.getElementById("workoutCsvConfirm").addEventListener("click",async ()=>
   await pushNow();
   setSyncStatus(details.join(" · ")+" ✓","ok");
 });
+function workoutFingerprint(entry){
+  const value=JSON.stringify({date:entry.date,type:entry.type,name:entry.name,exercises:entry.exercises});
+  let hash=2166136261;
+  for(let i=0;i<value.length;i++){ hash^=value.charCodeAt(i); hash=Math.imul(hash,16777619); }
+  return `ai-workout:${(hash>>>0).toString(36)}`;
+}
+document.getElementById("workoutAiConfirm").addEventListener("click",async ()=>{
+  const input=document.getElementById("workoutCsvFile");
+  const file=input.files&&input.files[0];
+  if(!file){ setSyncStatus("Choose a workout export first.","err"); return; }
+  if(file.size>250000){ setSyncStatus("AI import supports files up to 250 KB.","err"); return; }
+  const extension=(file.name.split(".").pop()||"").toLowerCase();
+  if(!["csv","tsv","json","txt"].includes(extension)){ setSyncStatus("AI import currently supports CSV, TSV, JSON, and TXT files.","err"); return; }
+  setSyncStatus("AI is reading and converting the workout file…","wait");
+  let response;
+  try{
+    response=await fetch("/api/import-workouts",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({idToken:ID_TOKEN,fileName:file.name,fileText:await file.text()})});
+  }catch(e){ setSyncStatus("Could not reach the AI importer.","err"); return; }
+  const result=await response.json().catch(()=>({ok:false,error:"Invalid response from the AI importer."}));
+  if(result.usage) recordAiUsage(result.usage);
+  if(!result.ok){ setSyncStatus(result.error||"The AI could not import this file.","err"); return; }
+  STORE.entries=STORE.entries||[];
+  result.entries.forEach(entry=>{ entry.importId=workoutFingerprint(entry); });
+  const knownIds=new Set(STORE.entries.map(entry=>entry.importId).filter(Boolean));
+  const additions=result.entries.filter(entry=>!knownIds.has(entry.importId));
+  STORE.entries.push(...additions);
+  STORE.seedImported=true;
+  saveStore(STORE);
+  input.value="";
+  document.getElementById("importBox").style.display="none";
+  buildStrip(); buildSelect(); renderStrength(); rebuildDatalist();
+  if(document.getElementById("view-cardio").classList.contains("on")) buildCardio();
+  if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
+  const duplicates=result.entries.length-additions.length;
+  const details=[`${additions.length} workout${additions.length===1?'':'s'} imported by AI`];
+  if(duplicates) details.push(`${duplicates} already present`);
+  if(result.warnings&&result.warnings.length) details.push(result.warnings[0]);
+  setSyncStatus(details.join(" · ")+". Saving…","wait");
+  await pushNow();
+  setSyncStatus(details.join(" · ")+" ✓","ok");
+});
 document.getElementById("importConfirm").addEventListener("click",async ()=>{
   const raw=document.getElementById("importText").value.trim();
   if(!raw){ setSyncStatus("Paste your JSON first.","err"); return; }

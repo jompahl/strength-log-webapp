@@ -919,6 +919,7 @@ document.getElementById("welcomeSave").addEventListener("click",saveWelcomeProfi
 });
 
 let OURA_CONNECTED=false;
+let OURA_RETURN_ERROR="";
 async function ouraCall(action,data={}){
   const response=await fetch("/api/oura",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({idToken:ID_TOKEN,action,...data})});
@@ -950,7 +951,8 @@ async function renderOuraStatus(){
   setOuraUi({configured:true,connected:OURA_CONNECTED,message:"Checking connection…"});
   try{
     const result=await ouraCall("status");
-    setOuraUi({configured:result.configured,connected:result.connected});
+    setOuraUi({configured:result.configured,connected:result.connected,
+      message:!result.connected&&OURA_RETURN_ERROR?OURA_RETURN_ERROR:""});
   }catch(e){ setOuraUi({configured:true,connected:false,message:e.message}); }
 }
 async function maybeAutoSyncOura(){
@@ -986,6 +988,7 @@ async function handleOuraReturn(){
   history.replaceState({},"",location.pathname+(params.toString()?"?"+params.toString():"")+location.hash);
   document.getElementById("acctBtn").click();
   if(result==="connected"){
+    OURA_RETURN_ERROR="";
     setOuraUi({configured:true,connected:true,message:"Oura connected · importing daily burn…"});
     await syncOuraData(false);
   }else{
@@ -998,7 +1001,8 @@ async function handleOuraReturn(){
       token_exchange_failed:"Oura rejected the client ID, secret, or redirect URI.",
       token_storage_failed:"Oura authorized successfully, but the token could not be saved. Check the server logs.",
     };
-    setOuraUi({configured:true,connected:false,message:errors[errorCode]||"Oura could not be connected. Please try again."});
+    OURA_RETURN_ERROR=errors[errorCode]||"Oura could not be connected. Please try again.";
+    setOuraUi({configured:true,connected:false,message:OURA_RETURN_ERROR});
   }
 }
 
@@ -1022,6 +1026,7 @@ document.getElementById("ouraToggle").addEventListener("change",async e=>{
   const toggle=e.currentTarget;
   toggle.disabled=true;
   if(toggle.checked){
+    OURA_RETURN_ERROR="";
     try{
       const result=await ouraCall("connect");
       location.assign(result.url);

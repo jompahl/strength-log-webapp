@@ -16,6 +16,10 @@ function redirect(res, url) {
   res.end();
 }
 
+function errorRedirect(res, origin, message) {
+  return redirect(res, `${origin}/?oura=error&message=${encodeURIComponent(message)}`);
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -24,21 +28,31 @@ module.exports = async (req, res) => {
 
   if (req.method === 'GET') {
     const origin = appOrigin(req);
-    if (!isConfigured()) return redirect(res, `${origin}/?oura=error&message=not_configured`);
+    if (!isConfigured()) return errorRedirect(res, origin, 'not_configured');
     const state = verifyState(req.query?.state);
     const nonce = cookieValue(req, 'oura_oauth_nonce');
     res.setHeader('Set-Cookie', 'oura_oauth_nonce=; HttpOnly; SameSite=Lax; Path=/api/oura; Max-Age=0');
-    if (!state || !nonce || nonce !== state.nonce) return redirect(res, `${origin}/?oura=error&message=invalid_state`);
-    if (req.query?.error) return redirect(res, `${origin}/?oura=error&message=access_denied`);
-    if (!req.query?.code) return redirect(res, `${origin}/?oura=error&message=missing_code`);
+    // Some browsers discard the short-lived cookie during the round trip through
+    // Oura. The signed, expiring state still binds this callback to the Google
+    // user who started it. If the cookie is present, continue to enforce it.
+    if (!state || (nonce && nonce !== state.nonce)) return errorRedirect(res, origin, 'invalid_state');
+    if (req.query?.error) return errorRedirect(res, origin, 'access_denied');
+    if (!req.query?.code) return errorRedirect(res, origin, 'missing_code');
+    let data;
     try {
-      const data = await tokenRequest({ grant_type: 'authorization_code', code: req.query.code, redirect_uri: OURA_REDIRECT_URI });
-      const token = normalizeToken({ ...data, scope: data.scope || req.query?.scope || '' });
-      if (!String(token.scope).split(/[ ,]+/).includes('daily')) return redirect(res, `${origin}/?oura=error&message=daily_scope_required`);
+      data = await tokenRequest({ grant_type: 'authorization_code', code: req.query.code, redirect_uri: OURA_REDIRECT_URI });
+    } catch (e) {
+      console.error('Oura token exchange failed:', e);
+      return errorRedirect(res, origin, 'token_exchange_failed');
+    }
+    const token = normalizeToken({ ...data, scope: data.scope || req.query?.scope || '' });
+    if (!String(token.scope).split(/[ ,+]+/).includes('daily')) return errorRedirect(res, origin, 'daily_scope_required');
+    try {
       await saveToken(state.sub, token);
       return redirect(res, `${origin}/?oura=connected`);
     } catch (e) {
-      return redirect(res, `${origin}/?oura=error&message=connection_failed`);
+      console.error('Oura token storage failed:', e);
+      return errorRedirect(res, origin, 'token_storage_failed');
     }
   }
 

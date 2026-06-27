@@ -980,6 +980,7 @@ async function syncOuraData(showMessage=true){
 async function handleOuraReturn(){
   const params=new URLSearchParams(location.search);
   const result=params.get("oura");
+  const errorCode=params.get("message")||"";
   if(!result) return;
   params.delete("oura"); params.delete("message");
   history.replaceState({},"",location.pathname+(params.toString()?"?"+params.toString():"")+location.hash);
@@ -988,7 +989,16 @@ async function handleOuraReturn(){
     setOuraUi({configured:true,connected:true,message:"Oura connected · importing daily burn…"});
     await syncOuraData(false);
   }else{
-    setOuraUi({configured:true,connected:false,message:"Oura could not be connected. Please try again."});
+    const errors={
+      not_configured:"Oura credentials are missing from this deployment.",
+      invalid_state:"The Oura login session expired. Please try connecting again.",
+      access_denied:"Oura access was not approved.",
+      missing_code:"Oura did not return an authorization code.",
+      daily_scope_required:"Please approve Daily access when connecting Oura.",
+      token_exchange_failed:"Oura rejected the client ID, secret, or redirect URI.",
+      token_storage_failed:"Oura authorized successfully, but the token could not be saved. Check the server logs.",
+    };
+    setOuraUi({configured:true,connected:false,message:errors[errorCode]||"Oura could not be connected. Please try again."});
   }
 }
 

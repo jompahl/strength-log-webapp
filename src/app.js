@@ -982,6 +982,12 @@ async function syncOuraData(showMessage=true){
   if(showMessage) setOuraUi({configured:true,connected:true,message:"Syncing daily calorie burn…"});
   try{
     const result=await ouraCall("sync",{startDate:addLocalDays(localDateString(),-90),endDate:localDateString()});
+    if(!result.daily.length){
+      const detail=result.receivedDays
+        ?`Oura returned ${result.receivedDays} day${result.receivedDays===1?'':'s'}, but none included total calories.`
+        :"Oura returned no Daily Activity data. Reconnect and make sure Daily access is approved.";
+      throw new Error(detail);
+    }
     const byDate=new Map((STORE.ouraDaily||[]).map(row=>[row.date,row]));
     result.daily.forEach(row=>byDate.set(row.date,row));
     const retentionStart=addLocalDays(localDateString(),-90);

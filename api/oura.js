@@ -89,6 +89,7 @@ module.exports = async (req, res) => {
         configured: true,
         connected: Boolean(token),
         connectedAt: token?.connectedAt || null,
+        grantedScope: token?.scope || null,
         lastOAuthResult: cookieValue(req, 'oura_oauth_result') || null,
       });
     }
@@ -119,15 +120,16 @@ module.exports = async (req, res) => {
       const token = await usableToken(user.sub);
       if (!token) return res.status(409).json({ ok: false, error: 'Connect Oura first.' });
       const rows = await fetchDailyActivity(token.accessToken, startDate, endDate);
-      const daily = rows.map(row => ({
+      const mapped = rows.map(row => ({
         date: row.day,
         activeCalories: Number(row.active_calories) || 0,
         totalCalories: Number(row.total_calories) || 0,
         steps: Number(row.steps) || 0,
         score: Number(row.score) || null,
         syncedAt: new Date().toISOString(),
-      })).filter(row => /^\d{4}-\d{2}-\d{2}$/.test(row.date) && row.totalCalories > 0);
-      return res.status(200).json({ ok: true, daily });
+      }));
+      const daily = mapped.filter(row => /^\d{4}-\d{2}-\d{2}$/.test(row.date) && row.totalCalories > 0);
+      return res.status(200).json({ ok: true, daily, receivedDays: rows.length, discardedDays: mapped.length - daily.length });
     }
     return res.status(400).json({ ok: false, error: 'Unknown Oura action.' });
   } catch (e) {

@@ -59,12 +59,9 @@ module.exports = async (req, res) => {
     }
     const returnedScope = data.scope || req.query?.scope || '';
     const token = normalizeToken({ ...data, scope: returnedScope });
-    // Oura does not consistently include `scope` in every server-side OAuth
-    // response. Only reject when it explicitly returns a list without Daily;
-    // the daily_activity request remains the final permission check.
-    if (returnedScope && !String(returnedScope).toLowerCase().split(/[ ,+]+/).includes('daily')) {
-      return errorRedirect(res, origin, 'daily_scope_required');
-    }
+    // Oura's returned scope value is not consistent across authorization
+    // responses. The daily_activity endpoint is the authoritative permission
+    // check, so retain the value for diagnostics but do not reject a valid token.
     try {
       await saveToken(state.sub, token);
       rememberOAuthResult(res, origin, 'connected');

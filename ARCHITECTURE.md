@@ -9,6 +9,9 @@
 - `src/domain.js` holds shared domain constants such as exercise muscle groups and workout calorie estimates.
 - `api/sync.js` verifies Google sign-in tokens and syncs each user's data to the central Google Sheet.
 - `api/parse.js` verifies Google sign-in tokens and calls Anthropic for chat/photo parsing.
+- `api/oura.js` handles Oura OAuth, connection status, disconnects, and Daily Activity sync.
+- Oura access and refresh tokens are AES-256-GCM encrypted in the hidden `OuraAuth` sheet; decrypted tokens never reach the browser.
+- Synced Oura Daily Activity totals are stored in each user's regular data payload and replace estimated calorie output for matching days.
 - AI usage is stored per user in the synced payload as `aiUsage`, with timestamp, provider, model, request type, and token counts returned by Anthropic.
 
 ## Recommended next steps

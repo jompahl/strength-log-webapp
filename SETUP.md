@@ -36,6 +36,8 @@ Then fill in:
 - `GOOGLE_SA_KEY`
 - `SHEET_ID`
 - `ANTHROPIC_API_KEY` if you also want local AI/photo parsing
+- `OURA_CLIENT_ID`, `OURA_CLIENT_SECRET`, `OURA_REDIRECT_URI`, and
+  `OURA_TOKEN_ENCRYPTION_KEY` if you want Oura calorie sync
 
 In Google Cloud Console, your OAuth client must include this authorized
 JavaScript origin:
@@ -135,6 +137,33 @@ for zero-setup on their side.
 
 That's it. Open the URL, click **Continue with Google**, and you're in. Share the URL
 with friends — they just sign in.
+
+---
+
+## Part D — Oura calorie sync (optional)
+
+1. Create an OAuth application in the Oura developer portal at
+   `https://developer.ouraring.com`.
+2. Add this exact redirect URI to the Oura application:
+
+   ```text
+   https://YOUR-VERCEL-DOMAIN/api/oura
+   ```
+
+3. Add these environment variables in Vercel:
+
+   | Name | Value |
+   |---|---|
+   | `OURA_CLIENT_ID` | the Oura application's client ID |
+   | `OURA_CLIENT_SECRET` | the Oura application's client secret |
+   | `OURA_REDIRECT_URI` | the exact `/api/oura` URL registered above |
+   | `OURA_TOKEN_ENCRYPTION_KEY` | a private random secret, for example from `openssl rand -hex 32` |
+
+4. Redeploy the app. Users can then open **Account** and turn on **Sync to Oura**.
+
+The app requests only Oura's `daily` scope. Tokens are encrypted server-side and
+stored in a hidden `OuraAuth` tab. Oura Total Burn replaces the app's estimated
+daily output on synced dates, so workout calories are not counted twice.
 
 ---
 

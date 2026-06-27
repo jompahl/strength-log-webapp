@@ -15,6 +15,7 @@ const SA_EMAIL  = process.env.GOOGLE_SA_EMAIL;
 const SA_KEY    = (process.env.GOOGLE_SA_KEY || '').replace(/\\n/g, '\n');
 const SHEET_ID  = process.env.SHEET_ID;
 const DATA_TAB  = 'UserData';     // hidden-ish tab holding JSON blobs per user
+const JSON_CHUNK_SIZE = 45000;     // Google Sheets cells cap text at 50,000 characters
 
 const authClient = new OAuth2Client(CLIENT_ID);
 
@@ -57,7 +58,7 @@ async function ensureTab(sheets) {
 async function readAll(sheets) {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${DATA_TAB}!A2:D`,
+    range: `${DATA_TAB}!A2:Z`,
   });
   return res.data.values || [];
 }
@@ -66,7 +67,7 @@ async function loadUser(sheets, sub) {
   const rows = await readAll(sheets);
   for (const r of rows) {
     if (r[0] === sub) {
-      try { return JSON.parse(r[3] || '{}'); } catch (e) { return {}; }
+      try { return JSON.parse(r.slice(3).join('') || '{}'); } catch (e) { return {}; }
     }
   }
   return null;
@@ -78,21 +79,25 @@ async function saveUser(sheets, user, data) {
   for (let i = 0; i < rows.length; i++) {
     if (rows[i][0] === user.sub) { rowIndex = i; break; }
   }
-  const values = [[user.sub, user.email, user.name, JSON.stringify(data)]];
+  const json = JSON.stringify(data);
+  const chunks = [];
+  for (let i = 0; i < json.length; i += JSON_CHUNK_SIZE) chunks.push(json.slice(i, i + JSON_CHUNK_SIZE));
+  const values = [[user.sub, user.email, user.name, ...chunks]];
   if (rowIndex === -1) {
     // append
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: `${DATA_TAB}!A:D`,
+      range: `${DATA_TAB}!A:Z`,
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: { values },
     });
   } else {
     const sheetRow = rowIndex + 2; // +1 header, +1 to 1-based
+    await sheets.spreadsheets.values.clear({ spreadsheetId: SHEET_ID, range: `${DATA_TAB}!A${sheetRow}:Z${sheetRow}` });
     await sheets.spreadsheets.values.update({
       spreadsheetId: SHEET_ID,
-      range: `${DATA_TAB}!A${sheetRow}:D${sheetRow}`,
+      range: `${DATA_TAB}!A${sheetRow}`,
       valueInputOption: 'RAW',
       requestBody: { values },
     });
@@ -115,6 +120,7 @@ async function mirror(sheets, user, data) {
     const rows = [];
     rows.push(['Type', 'Date', 'Detail', 'A', 'B', 'C']);
     (data.weights || []).forEach(w => rows.push(['Weight', w.date, '', w.kg, '', '']));
+    (data.ouraDaily || []).forEach(d => rows.push(['Oura', d.date, 'Daily burn', d.totalCalories || '', d.activeCalories || '', d.steps || '']));
     (data.food || []).forEach(f => rows.push(['Food', f.date, f.name, f.kcal, f.p || 0, '']));
     (data.aiUsage || []).forEach(u => rows.push([
       'AI Usage',

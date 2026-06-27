@@ -14,6 +14,7 @@ const apiHandlers = {
   '/api/sync': require('../api/sync.js'),
   '/api/parse': require('../api/parse.js'),
   '/api/import-workouts': require('../api/import-workouts.js'),
+  '/api/oura': require('../api/oura.js'),
 };
 
 const vite = await createViteServer({

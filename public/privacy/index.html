@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Privacy Policy · Strength Log</title>
+  <style>
+    :root{--bg:#0e1116;--panel:#161b23;--line:#2c323d;--ink:#e8eaed;--muted:#9aa2af;--amber:#f5a623}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif}
+    main{width:min(760px,calc(100% - 32px));margin:0 auto;padding:48px 0 72px}
+    .brand{display:flex;align-items:center;gap:9px;color:var(--ink);text-decoration:none;font-weight:800}.dot{width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 10px var(--amber)}
+    article{margin-top:26px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:clamp(22px,5vw,42px)}
+    h1{font-size:clamp(28px,6vw,42px);line-height:1.08;letter-spacing:-.03em;margin:0 0 8px}h2{font-size:18px;margin:30px 0 8px}p,li{color:var(--muted)}ul{padding-left:22px}a{color:var(--amber)}.updated{font-size:13px;color:var(--muted);margin:0}.callout{border-left:3px solid var(--amber);padding:10px 14px;background:#11151c;border-radius:0 8px 8px 0}.back{display:inline-block;margin-top:28px}
+  </style>
+</head>
+<body>
+  <main>
+    <a class="brand" href="/"><span class="dot"></span>Strength Log</a>
+    <article>
+      <h1>Privacy Policy</h1>
+      <p class="updated">Effective: 27 June 2026</p>
+      <p>This policy explains how the operator of Strength Log collects, uses, stores, shares, retains, and deletes personal data when you use the application. Use of the service is also governed by the <a href="/terms">Terms of Service</a>.</p>
+
+      <h2>Data we collect</h2>
+      <ul>
+        <li><strong>Account data:</strong> your Google account identifier, name, and email address when you sign in.</li>
+        <li><strong>Data you enter:</strong> profile details, weight, workouts, food logs, cardio sessions, notes, goals, and chat messages or meal photos you choose to submit.</li>
+        <li><strong>Oura data:</strong> if you enable Oura sync, daily total calories, active calories, steps, activity score, sync timestamps, and encrypted OAuth credentials.</li>
+        <li><strong>Technical data:</strong> limited operational information required to authenticate, synchronize, secure, and troubleshoot the service.</li>
+      </ul>
+
+      <h2>How we use data</h2>
+      <p>We use your data only to provide Strength Log features: preserving your history, displaying progress and trends, calculating daily calorie balance, responding to your requests, synchronizing your account, and maintaining security.</p>
+
+      <h2>Oura data</h2>
+      <p>Oura access is optional and requires your explicit authorization. Strength Log requests only Oura's <code>daily</code> permission. Oura daily data is used to display activity and calculate energy expenditure inside Strength Log.</p>
+      <p class="callout"><strong>Oura data is not sent to Anthropic or any other third-party AI service.</strong> It is not used to train, fine-tune, evaluate, or prompt an AI model.</p>
+      <p>Strength Log retains synced Oura daily records for no longer than 90 days. Turning off Oura sync revokes the connection and removes stored Oura OAuth credentials and cached Oura records from Strength Log.</p>
+
+      <h2>AI features</h2>
+      <p>If you choose to use coach chat, meal-photo analysis, or AI-assisted file import, the text, image, or file you submit and the minimum non-Oura app context required for that request are sent to Anthropic for processing. These features are optional. Oura API data is excluded from AI requests.</p>
+
+      <h2>Storage and service providers</h2>
+      <ul>
+        <li><strong>Google:</strong> authentication and the operator-controlled Google Sheet used for account data storage.</li>
+        <li><strong>Vercel:</strong> application hosting and server-side API execution.</li>
+        <li><strong>Oura:</strong> authorization and retrieval of daily activity data when you enable Oura sync.</li>
+        <li><strong>Anthropic:</strong> optional AI processing initiated by you.</li>
+      </ul>
+      <p>Oura access and refresh tokens are encrypted server-side before storage. No internet service can guarantee absolute security, but reasonable technical measures are used to prevent unauthorized access.</p>
+
+      <h2>Sharing and sale</h2>
+      <p>Personal data is not sold, rented, used for advertising, or disclosed to unrelated third parties. It is shared with the service providers above only as required to operate the features you choose to use, or when legally required.</p>
+
+      <h2>Retention and deletion</h2>
+      <p>Non-Oura account data is kept while your Strength Log account remains in use or until deletion is requested. You may disconnect Oura at any time in Account settings. You may also request access to or deletion of your data. Verified deletion requests, including Oura data, will be completed within 72 hours.</p>
+
+      <h2>Your choices</h2>
+      <ul>
+        <li>Do not enable Oura sync if you do not want Oura data processed by Strength Log.</li>
+        <li>Turn off Oura sync at any time to revoke access and remove synced Oura data.</li>
+        <li>Avoid AI features if you do not want submitted content processed by Anthropic.</li>
+        <li>Request access, correction, export, or deletion of your stored data from the operator.</li>
+      </ul>
+
+      <h2>Health information</h2>
+      <p>Strength Log is a personal fitness tool, not a medical device. Its calorie calculations and AI responses are estimates and are not medical advice.</p>
+
+      <h2>Contact</h2>
+      <p>For privacy questions or a data-deletion request, contact the Strength Log operator who provided your access. You can also reach the project operator through <a href="https://github.com/jompahl" rel="noopener noreferrer">GitHub</a>. Do not include health information in a public GitHub post.</p>
+
+      <h2>Changes</h2>
+      <p>This policy may be updated when the service or its providers change. The effective date at the top will be updated when material changes are made.</p>
+
+      <a class="back" href="/">← Back to Strength Log</a>
+    </article>
+  </main>
+</body>
+</html>

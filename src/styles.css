@@ -94,6 +94,14 @@
   .setRow{display:flex; gap:8px; align-items:center; margin-bottom:7px}
   .setRow .ix{color:var(--faint); font-size:12px; width:42px; font-weight:600}
   .linkBtn{background:none; border:none; color:var(--amber); font-size:12.5px; font-weight:600; cursor:pointer; padding:4px 0}
+  .ouraSwitch{position:relative;display:inline-flex;align-items:center;cursor:pointer;flex:0 0 auto}
+  .ouraSwitch input{position:absolute;opacity:0;width:1px;height:1px}
+  .ouraSwitchTrack{width:44px;height:24px;border-radius:999px;background:var(--line);border:1px solid #3a414d;transition:.16s;position:relative}
+  .ouraSwitchTrack:after{content:"";position:absolute;width:18px;height:18px;left:2px;top:2px;border-radius:50%;background:#8b93a1;transition:.16s}
+  .ouraSwitch input:checked + .ouraSwitchTrack{background:var(--amber);border-color:var(--amber)}
+  .ouraSwitch input:checked + .ouraSwitchTrack:after{transform:translateX(20px);background:#1a1205}
+  .ouraSwitch input:focus-visible + .ouraSwitchTrack{outline:2px solid var(--blue);outline-offset:2px}
+  .ouraSwitch input:disabled + .ouraSwitchTrack{opacity:.45;cursor:not-allowed}
   .xBtn{background:none; border:none; color:var(--faint); cursor:pointer; font-size:16px; line-height:1; padding:2px 6px}
   .xBtn:hover{color:var(--red)}
   .exBlock{border:1px solid var(--line); border-radius:10px; padding:13px; margin-bottom:12px; background:var(--panel2)}

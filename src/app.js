@@ -48,12 +48,13 @@ let FIRST_PULL_DONE=false;  // becomes true after the initial load; gates pushes
 function syncPayload(){
   return {entries:STORE.entries||[], food:STORE.food||[], weights:STORE.weights||[],
     hiddenFood:STORE.hiddenFood||[], profile:STORE.profile||{}, aiUsage:STORE.aiUsage||[],
+    ouraDaily:STORE.ouraDaily||[],
     coachId:STORE.coachId||selectedCoach().id, seedImported:!!STORE.seedImported};
 }
 function applyPayload(d){
   if(!d) return;
   STORE.entries=d.entries||[]; STORE.food=d.food||[]; STORE.weights=d.weights||[];
-  STORE.hiddenFood=d.hiddenFood||[]; STORE.aiUsage=d.aiUsage||[];
+  STORE.hiddenFood=d.hiddenFood||[]; STORE.aiUsage=d.aiUsage||[]; STORE.ouraDaily=d.ouraDaily||[];
   if(d.coachId) STORE.coachId=d.coachId;
   if(d.profile&&Object.keys(d.profile).length) STORE.profile=d.profile;
   if(typeof d.seedImported!=="undefined") STORE.seedImported=!!d.seedImported;
@@ -232,7 +233,8 @@ async function pullNow(){
     if(j.ok){
       const remote=j.data;
       const hasRemote=remote&&((remote.entries&&remote.entries.length)||(remote.food&&remote.food.length)||
-        (remote.weights&&remote.weights.length)||(remote.aiUsage&&remote.aiUsage.length));
+        (remote.weights&&remote.weights.length)||(remote.aiUsage&&remote.aiUsage.length)||
+        (remote.ouraDaily&&remote.ouraDaily.length)||(remote.profile&&remote.profile.onboardingComplete));
       if(hasRemote){ applyPayload(remote); FIRST_PULL_DONE=true; }
       else {
         // brand-new account: start blank (no demo history). Mark as initialized so
@@ -248,6 +250,7 @@ async function pullNow(){
       buildStrip(); buildSelect(); renderStrength(); rebuildDatalist();
       if(document.getElementById("view-cardio").classList.contains("on")) buildCardio();
       if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
+      if(!new URLSearchParams(location.search).has("oura")) maybeAutoSyncOura();
     } else if(/sign-in/i.test(j.error||"")){ requireSignIn(); }
     else setSyncStatus("Load error: "+(j.error||"unknown"),"err");
   }catch(e){ setSyncStatus("Couldn't reach the server.","err"); }
@@ -279,7 +282,7 @@ function handleCredential(resp){
   CURRENT_USER=newUser;
   sessionStorage.setItem("idtoken", ID_TOKEN);
   showApp();
-  pullNow();
+  pullNow().finally(handleOuraReturn);
 }
 function showApp(){
   document.getElementById("signinOverlay").style.display="none";
@@ -370,6 +373,7 @@ function saveWelcomeProfile(){
 let STORE = loadStore();
 if(!STORE.profile) STORE.profile = JSON.parse(JSON.stringify(DB.profile));
 if(!STORE.weights) STORE.weights = [];
+if(!STORE.ouraDaily) STORE.ouraDaily = [];
 // never show the built-in demo data in the multi-user app; real data comes from the Sheet
 if(typeof STORE.seedImported==="undefined") STORE.seedImported = true;
 
@@ -580,13 +584,21 @@ function workoutBurnForDay(day){
   return burn;
 }
 function foodForDay(day){ return foodEntries().filter(f=>f.date===day); }
-function dayTotals(day){
+function ouraForDay(day){ return (STORE.ouraDaily||[]).find(row=>row.date===day&&row.totalCalories>0)||null; }
+function dayTotals(day,{includeOura=true}={}){
   const p=profile(); const maint=Math.round(p.bmr*parseFloat(p.activityMult||1.2));
-  const workout=workoutBurnForDay(day);
+  let workout=workoutBurnForDay(day);
   const foods=foodForDay(day); const intake=foods.reduce((a,f)=>a+(f.kcal||0),0);
   const protein=foods.reduce((a,f)=>a+(f.p||0),0);
-  const out=maint+workout; const net=intake-out; // negative = deficit
-  return {maint,workout,out,intake,protein,net,foods};
+  const oura=includeOura?ouraForDay(day):null;
+  let base=maint, out=maint+workout;
+  if(oura){
+    out=oura.totalCalories;
+    workout=oura.activeCalories||0;
+    base=Math.max(0,out-workout);
+  }
+  const net=intake-out; // negative = deficit
+  return {maint:base,workout,out,intake,protein,net,foods,oura};
 }
 function renderCalories(){
   const p=profile();
@@ -595,6 +607,8 @@ function renderCalories(){
   const t=dayTotals(CAL_DAY);
   document.getElementById("lMaint").textContent=fmt0(t.maint)+" kcal";
   document.getElementById("lWorkout").textContent=(t.workout?"+":"")+fmt0(t.workout)+" kcal";
+  document.getElementById("lMaintLabel").textContent=t.oura?"Base / resting burn (Oura)":"Resting burn (BMR×activity)";
+  document.getElementById("lWorkoutLabel").textContent=t.oura?"Active burn (Oura)":"Workout burn";
   document.getElementById("lOut").textContent=fmt0(t.out)+" kcal";
   document.getElementById("lIn").textContent=fmt0(t.intake)+" kcal";
   const deficit=-t.net;
@@ -904,6 +918,80 @@ document.getElementById("welcomeSave").addEventListener("click",saveWelcomeProfi
   document.getElementById(id).addEventListener("keydown",e=>{ if(e.key==="Enter") saveWelcomeProfile(); });
 });
 
+let OURA_CONNECTED=false;
+async function ouraCall(action,data={}){
+  const response=await fetch("/api/oura",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({idToken:ID_TOKEN,action,...data})});
+  const result=await response.json().catch(()=>({ok:false,error:"Invalid response from Oura sync."}));
+  if(!result.ok) throw new Error(result.error||"Oura sync failed.");
+  return result;
+}
+function latestOuraSync(){
+  const values=(STORE.ouraDaily||[]).map(row=>row.syncedAt).filter(Boolean).sort();
+  return values.length?values[values.length-1]:null;
+}
+function setOuraUi({configured=true,connected=false,message=""}={}){
+  const toggle=document.getElementById("ouraToggle");
+  const status=document.getElementById("ouraStatus");
+  const actions=document.getElementById("ouraActions");
+  OURA_CONNECTED=connected;
+  toggle.checked=connected;
+  toggle.disabled=!configured||!ID_TOKEN;
+  actions.style.display=connected?"flex":"none";
+  if(message) status.textContent=message;
+  else if(!configured) status.textContent="Oura API credentials still need to be configured.";
+  else if(connected){
+    const last=latestOuraSync();
+    status.textContent=last?`Connected · last synced ${new Date(last).toLocaleString()}`:"Connected · ready to sync";
+  } else status.textContent="Off · use Oura Total Burn instead of calorie estimates";
+}
+async function renderOuraStatus(){
+  if(!ID_TOKEN){ setOuraUi({configured:false,message:"Sign in to connect Oura."}); return; }
+  setOuraUi({configured:true,connected:OURA_CONNECTED,message:"Checking connection…"});
+  try{
+    const result=await ouraCall("status");
+    setOuraUi({configured:result.configured,connected:result.connected});
+  }catch(e){ setOuraUi({configured:true,connected:false,message:e.message}); }
+}
+async function maybeAutoSyncOura(){
+  if(!ID_TOKEN) return;
+  try{
+    const status=await ouraCall("status");
+    if(!status.configured||!status.connected) return;
+    OURA_CONNECTED=true;
+    const last=latestOuraSync();
+    if(!last||Date.now()-new Date(last).getTime()>6*60*60*1000) await syncOuraData(false);
+  }catch(e){}
+}
+async function syncOuraData(showMessage=true){
+  if(!ID_TOKEN) return;
+  if(showMessage) setOuraUi({configured:true,connected:true,message:"Syncing daily calorie burn…"});
+  try{
+    const result=await ouraCall("sync",{startDate:addLocalDays(localDateString(),-90),endDate:localDateString()});
+    const byDate=new Map((STORE.ouraDaily||[]).map(row=>[row.date,row]));
+    result.daily.forEach(row=>byDate.set(row.date,row));
+    const retentionStart=addLocalDays(localDateString(),-90);
+    STORE.ouraDaily=[...byDate.values()].filter(row=>row.date>=retentionStart).sort((a,b)=>a.date<b.date?-1:1);
+    saveStore(STORE);
+    setOuraUi({configured:true,connected:true,message:`Connected · ${result.daily.length} day${result.daily.length===1?'':'s'} synced`});
+    if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
+  }catch(e){ setOuraUi({configured:true,connected:true,message:e.message}); }
+}
+async function handleOuraReturn(){
+  const params=new URLSearchParams(location.search);
+  const result=params.get("oura");
+  if(!result) return;
+  params.delete("oura"); params.delete("message");
+  history.replaceState({},"",location.pathname+(params.toString()?"?"+params.toString():"")+location.hash);
+  document.getElementById("acctBtn").click();
+  if(result==="connected"){
+    setOuraUi({configured:true,connected:true,message:"Oura connected · importing daily burn…"});
+    await syncOuraData(false);
+  }else{
+    setOuraUi({configured:true,connected:false,message:"Oura could not be connected. Please try again."});
+  }
+}
+
 // account modal
 const syncModal=document.getElementById("syncModal");
 document.getElementById("acctBtn").addEventListener("click",()=>{
@@ -912,12 +1000,36 @@ document.getElementById("acctBtn").addEventListener("click",()=>{
   el.textContent=CURRENT_USER?("Signed in as "+(CURRENT_USER.email||CURRENT_USER.name)):"Not signed in";
   fillAccountProfileForm();
   renderAiUsageStatus();
+  renderOuraStatus();
   syncModal.style.display="flex";
 });
 document.getElementById("acctProfileSave").addEventListener("click",saveAccountProfile);
 document.getElementById("syncClose").addEventListener("click",()=>{ syncModal.style.display="none"; });
 syncModal.addEventListener("click",e=>{ if(e.target===syncModal) syncModal.style.display="none"; });
 document.getElementById("syncPush").addEventListener("click",pushNow);
+document.getElementById("ouraSyncNow").addEventListener("click",()=>syncOuraData(true));
+document.getElementById("ouraToggle").addEventListener("change",async e=>{
+  const toggle=e.currentTarget;
+  toggle.disabled=true;
+  if(toggle.checked){
+    try{
+      const result=await ouraCall("connect");
+      location.assign(result.url);
+    }catch(err){ setOuraUi({configured:true,connected:false,message:err.message}); }
+    return;
+  }
+  if(!confirm("Turn off Oura sync and remove synced Oura calorie data from Strength Log?")){
+    setOuraUi({configured:true,connected:true}); return;
+  }
+  try{
+    await ouraCall("disconnect");
+    STORE.ouraDaily=[];
+    saveStore(STORE);
+    await pushNow();
+    setOuraUi({configured:true,connected:false,message:"Oura sync is off."});
+    if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
+  }catch(err){ setOuraUi({configured:true,connected:true,message:err.message}); }
+});
 
 /* ---- floating coach chat ---- */
 let QA_IMAGE=null, QA_MEDIA=null, CHAT_HISTORY=[], CHAT_CONTEXT=[];
@@ -1071,7 +1183,8 @@ function dayContext(){
   // build a compact snapshot of today's numbers for the coach
   try{
     const p=profile(); const today=localDateString();
-    const t=dayTotals(today);
+    // Oura API data must not be submitted to third-party AI services.
+    const t=dayTotals(today,{includeOura:false});
     const proTarget=Math.round((p.weight_kg||0)*(p.protein_per_kg||2));
     const proEaten=Math.round(t.protein||0);
     const foods=(t.foods||[]).map(f=>f.name).join(", ")||"nothing yet";
@@ -1404,7 +1517,7 @@ renderStrength();
     ID_TOKEN=saved;
     try{ const p=JSON.parse(atob(saved.split(".")[1]));
       // basic expiry check
-      if(p.exp && p.exp*1000>Date.now()){ CURRENT_USER={email:p.email,name:p.name||p.email}; showApp(); pullNow(); return; }
+      if(p.exp && p.exp*1000>Date.now()){ CURRENT_USER={email:p.email,name:p.name||p.email}; showApp(); pullNow().finally(handleOuraReturn); return; }
     }catch(e){}
   }
   initGoogle();

@@ -25,7 +25,8 @@
     <div id="gsiButton" style="display:flex; justify-content:center; margin-bottom:18px"></div>
     <div id="signinMsg" style="color:var(--faint); font-size:12.5px; min-height:18px"></div>
     <p style="color:var(--faint); font-size:11.5px; margin-top:24px; line-height:1.6">
-      Signing in shares only your name and email so your data is saved to your own space. Your friend who set this up can see the shared data sheet.
+      Signing in shares only your name and email so your data is saved to your own space. Your friend who set this up can see the shared data sheet.<br>
+      <a href="/privacy" style="color:var(--amber)">Privacy policy</a> · <a href="/terms" style="color:var(--amber)">Terms of Service</a>
     </p>
   </div>
 </div>
@@ -64,6 +65,22 @@
         <div style="display:flex; justify-content:space-between; gap:10px; align-items:center">
           <div id="acctProfileMsg" class="hint" style="margin:0; min-height:18px"></div>
           <button class="ghost" id="acctProfileSave">Save info</button>
+        </div>
+      </div>
+      <div style="border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:14px; background:var(--panel2)">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px">
+          <div>
+            <div style="font-size:11px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:5px">Oura</div>
+            <div style="font-size:13px; font-weight:650">Sync to Oura</div>
+            <div id="ouraStatus" class="hint" style="margin:3px 0 0">Checking connection…</div>
+          </div>
+          <label class="ouraSwitch" title="Sync daily calorie burn from Oura">
+            <input id="ouraToggle" type="checkbox" role="switch" aria-label="Sync to Oura">
+            <span class="ouraSwitchTrack" aria-hidden="true"></span>
+          </label>
+        </div>
+        <div id="ouraActions" style="display:none; justify-content:flex-end; margin-top:9px">
+          <button class="ghost" id="ouraSyncNow" style="padding:6px 10px; font-size:12px">Sync Oura now</button>
         </div>
       </div>
       <div style="border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:14px; background:var(--panel2)">
@@ -108,7 +125,9 @@
         <div class="hint" style="margin-top:8px">Legacy JSON replaces your current data. CSV workout import only adds missing workouts.</div>
       </div>
       <div class="hint" style="margin-top:14px; line-height:1.6">
-        Your data saves automatically a moment after each change, and loads when you sign in on any device.
+        Your data saves automatically a moment after each change, and loads when you sign in on any device.<br>
+        <a href="/privacy" target="_blank" rel="noopener" style="color:var(--amber)">Privacy policy</a> ·
+        <a href="/terms" target="_blank" rel="noopener" style="color:var(--amber)">Terms of Service</a>
       </div>
     </div>
   </div>
@@ -236,8 +255,8 @@
             <span id="barInLbl"></span><span id="barOutLbl"></span></div>
         </div>
         <div>
-          <div class="rowline"><span class="lbl">Resting burn (BMR×activity)</span><span class="val mono" id="lMaint"></span></div>
-          <div class="rowline"><span class="lbl">Workout burn</span><span class="val mono" id="lWorkout"></span></div>
+          <div class="rowline"><span class="lbl" id="lMaintLabel">Resting burn (BMR×activity)</span><span class="val mono" id="lMaint"></span></div>
+          <div class="rowline"><span class="lbl" id="lWorkoutLabel">Workout burn</span><span class="val mono" id="lWorkout"></span></div>
           <div class="rowline"><span class="lbl">Total out</span><span class="val mono" id="lOut"></span></div>
           <div class="rowline"><span class="lbl">Food in</span><span class="val mono" id="lIn"></span></div>
           <div class="rowline" style="border-top:2px solid var(--line)"><span class="lbl" style="color:var(--ink);font-weight:700">Deficit / surplus</span><span class="val mono" id="lNet"></span></div>

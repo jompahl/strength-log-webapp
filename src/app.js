@@ -914,7 +914,7 @@ syncModal.addEventListener("click",e=>{ if(e.target===syncModal) syncModal.style
 document.getElementById("syncPush").addEventListener("click",pushNow);
 
 /* ---- floating coach chat ---- */
-let QA_IMAGE=null, QA_MEDIA=null, CHAT_HISTORY=[];
+let QA_IMAGE=null, QA_MEDIA=null, CHAT_HISTORY=[], CHAT_CONTEXT=[];
 let ONBOARDING_ACTIVE=false;
 const coachOverlay=document.getElementById("coachOverlay");
 function openCoach(){
@@ -1149,13 +1149,16 @@ async function chatSend(){
   addTyping();
   try{
     const res=await fetch("/api/parse",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({idToken:ID_TOKEN, text, image:sentImage, mediaType:sentMedia, context:dayContext(), history:historyContext(), onboarding:ONBOARDING_ACTIVE, coachName:selectedCoach().label})});
+      body:JSON.stringify({idToken:ID_TOKEN, text, image:sentImage, mediaType:sentMedia, context:dayContext(), history:historyContext(), conversation:CHAT_CONTEXT.slice(-10), onboarding:ONBOARDING_ACTIVE, coachName:selectedCoach().label, localDate:localDateString()})});
     const j=await res.json();
     removeTyping();
     if(j.usage) recordAiUsage(j.usage);
     if(!j.ok){ addBubble("coach", j.error||"Hmm, I couldn't process that — try rephrasing?"); return; }
     const out=j.result||{};
+    CHAT_CONTEXT.push({role:"user",text:text||"[Shared a photo]"});
     if(out.reply && out.reply.trim()) addBubble("coach", out.reply.trim());
+    if(out.reply && out.reply.trim()) CHAT_CONTEXT.push({role:"coach",text:out.reply.trim()});
+    if(CHAT_CONTEXT.length>12) CHAT_CONTEXT=CHAT_CONTEXT.slice(-12);
     if(out.log) showLogCard(out.log);
     if(!out.log && (!out.reply||!out.reply.trim())) addBubble("coach","I wasn't sure what you meant there — want to try again?");
   }catch(e){ removeTyping(); addBubble("coach","I couldn't reach the server just now. Check your connection and try again."); }
@@ -1181,7 +1184,27 @@ function showLogCard(r){
     thread.scrollTop=thread.scrollHeight;
   }
 
-  if(r.kind==="profile"){
+  if(r.kind==="weight"){
+    const kg=Number(r.kg);
+    const date=/^\d{4}-\d{2}-\d{2}$/.test(r.date||"") ? r.date : today;
+    box.innerHTML=`<div style="font-weight:650; margin-bottom:8px">Weigh-in</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px">
+        <label style="font-size:11px;color:var(--muted)">Weight kg<input data-w="kg" type="number" min="20" max="400" step="0.1" value="${Number.isFinite(kg)?kg:''}" style="width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--ink);padding:7px"></label>
+        <label style="font-size:11px;color:var(--muted)">Date<input data-w="date" type="date" value="${date}" style="width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--ink);padding:7px"></label>
+      </div>
+      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:6px"><button class="ghost" data-x="c">Skip</button><button class="primary" data-x="ok">Log weight</button></div>`;
+    box.querySelector('[data-x="ok"]').onclick=()=>{
+      const weight=parseFloat(box.querySelector('[data-w="kg"]').value);
+      const weighDate=box.querySelector('[data-w="date"]').value;
+      if(!Number.isFinite(weight)||weight<20||weight>400){ toast("Check the weight"); return; }
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(weighDate)){ toast("Check the date"); return; }
+      STORE.weights=STORE.weights||[];
+      const existing=STORE.weights.find(w=>w.date===weighDate);
+      if(existing) existing.kg=weight; else STORE.weights.push({date:weighDate,kg:weight});
+      done(`Logged ${weight.toFixed(1)} kg for ${fmtDate(weighDate)}`);
+      renderWeight();
+    };
+  } else if(r.kind==="profile"){
     const activityOptions={sedentary:1.2,light:1.375,moderate:1.55,very:1.725};
     const activityLabel={sedentary:"Sedentary (desk)",light:"Lightly active",moderate:"Moderately active",very:"Very active"};
     const activity=(r.activity_level||"sedentary").toLowerCase();

@@ -1,5 +1,6 @@
 import { DB } from "./seedData.js";
 import { MUSCLE, STRENGTH_BURN } from "./domain.js";
+import { parseWorkoutCsv } from "./importWorkoutCsv.js";
 import coachTompahlUrl from "./assets/coaches/tompahl.jpg";
 import coachCalgaroUrl from "./assets/coaches/calgaro.jpg";
 import coachJompahlUrl from "./assets/coaches/jompahl.jpg";
@@ -402,6 +403,11 @@ function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg
 function isAssisted(name){ return /assisted/i.test(name); }
 function isBodyweight(sets){ return sets.every(s=> s.weight===0); }
 function hasLevels(sets){ return sets.some(s=> s.weight===null); }
+function setLabel(set){
+  if(set.duration_sec) return `${set.duration_sec}s`;
+  const weight=set.weight===null?"lvl":set.weight===0?"BW":set.weight;
+  return `${set.reps}×${weight}`;
+}
 
 function sessionMetric(ex, metric){
   const sets=ex.sets;
@@ -488,7 +494,7 @@ function buildHist(){
   const rows=[]; let runMax=-Infinity;
   strengthEntries().forEach(s=>s.exercises.forEach(e=>{ if(e.name===CURRENT_EX){ const m=sessionMetric(e,"e1rm"); const pr=m!==null&&m>runMax; if(m!==null&&m>runMax)runMax=m; rows.push({date:s.date,sets:e.sets,e1:m,pr}); } }));
   rows.reverse(); let html=`<tr><th>Date</th><th>Sets (reps × kg)</th><th class="r">e1RM</th></tr>`;
-  rows.forEach(r=>{ const pills=r.sets.map(st=>{ let w=st.weight===null?"lvl":st.weight===0?"BW":st.weight; return `<span class="setpill mono">${st.reps}×${w}</span>`; }).join("");
+  rows.forEach(r=>{ const pills=r.sets.map(st=>`<span class="setpill mono">${setLabel(st)}</span>`).join("");
     html+=`<tr><td class="mono" style="white-space:nowrap">${r.date}</td><td>${pills}</td><td class="r mono ${r.pr?'pr':''}">${r.e1===null?"—":fmt(r.e1)}${r.pr?" ★":""}</td></tr>`; });
   document.getElementById("histTable").innerHTML=html;
 }
@@ -1277,6 +1283,33 @@ document.getElementById("importBtn").addEventListener("click",()=>{
 document.getElementById("importCancel").addEventListener("click",()=>{
   document.getElementById("importBox").style.display="none";
   document.getElementById("importText").value="";
+  document.getElementById("workoutCsvFile").value="";
+});
+document.getElementById("workoutCsvConfirm").addEventListener("click",async ()=>{
+  const input=document.getElementById("workoutCsvFile");
+  const file=input.files&&input.files[0];
+  if(!file){ setSyncStatus("Choose a workout CSV first.","err"); return; }
+  let result;
+  try{ result=parseWorkoutCsv(await file.text()); }
+  catch(e){ setSyncStatus(e.message||"Could not read that workout CSV.","err"); return; }
+  STORE.entries=STORE.entries||[];
+  const knownIds=new Set(STORE.entries.map(entry=>entry.importId).filter(Boolean));
+  const additions=result.entries.filter(entry=>!knownIds.has(entry.importId));
+  STORE.entries.push(...additions);
+  STORE.seedImported=true;
+  saveStore(STORE);
+  input.value="";
+  document.getElementById("importBox").style.display="none";
+  buildStrip(); buildSelect(); renderStrength(); rebuildDatalist();
+  if(document.getElementById("view-cardio").classList.contains("on")) buildCardio();
+  if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
+  const duplicates=result.entries.length-additions.length;
+  const details=[`${additions.length} workout${additions.length===1?'':'s'} imported`];
+  if(duplicates) details.push(`${duplicates} already present`);
+  if(result.skippedRows) details.push(`${result.skippedRows} unsupported row${result.skippedRows===1?'':'s'} skipped`);
+  setSyncStatus(details.join(" · ")+". Saving to your account…","wait");
+  await pushNow();
+  setSyncStatus(details.join(" · ")+" ✓","ok");
 });
 document.getElementById("importConfirm").addEventListener("click",async ()=>{
   const raw=document.getElementById("importText").value.trim();

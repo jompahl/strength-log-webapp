@@ -890,7 +890,11 @@ document.querySelector(".tabs").addEventListener("click",e=>{ const b=e.target.c
   document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
   const v=b.dataset.v; document.querySelectorAll(".view").forEach(x=>x.classList.remove("on"));
   document.getElementById("view-"+v).classList.add("on");
-  if(v==="cardio") buildCardio(); if(v==="calories") renderCalories();
+  if(v==="cardio") buildCardio();
+  if(v==="calories"){
+    renderCalories();
+    maybeAutoSyncOura(true);
+  }
 });
 document.getElementById("exSelect").addEventListener("change",e=>{ CURRENT_EX=e.target.value; renderStrength(); });
 document.getElementById("metricSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
@@ -977,14 +981,14 @@ async function renderOuraStatus(){
     if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
   }catch(e){ setOuraUi({configured:true,connected:false,message:e.message}); }
 }
-async function maybeAutoSyncOura(){
+async function maybeAutoSyncOura(force=false){
   if(!ID_TOKEN) return;
   try{
     const status=await ouraCall("status");
     if(!status.configured||!status.connected) return;
     OURA_CONNECTED=true;
     const last=latestOuraSync();
-    if(!last||Date.now()-new Date(last).getTime()>6*60*60*1000) await syncOuraData(false);
+    if(force||!last||Date.now()-new Date(last).getTime()>6*60*60*1000) await syncOuraData(false);
     else if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
   }catch(e){}
 }

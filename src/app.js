@@ -591,58 +591,49 @@ function dayTotals(day,{includeOura=true}={}){
   const foods=foodForDay(day); const intake=foods.reduce((a,f)=>a+(f.kcal||0),0);
   const protein=foods.reduce((a,f)=>a+(f.p||0),0);
   const oura=includeOura?ouraForDay(day):null;
-  const awaitingOura=includeOura&&OURA_CONNECTED&&!oura;
   let base=maint, out=maint+workout;
   if(oura){
     out=oura.totalCalories;
     workout=oura.activeCalories||0;
     base=Math.max(0,out-workout);
-  }else if(awaitingOura){
-    // Once Oura is connected, never mix its totals with app-estimated workout
-    // burn. Leave burn-dependent values unavailable until Oura finalizes the day.
-    base=null;
-    workout=null;
-    out=null;
   }
-  const net=out===null?null:intake-out; // negative = deficit
-  return {maint:base,workout,out,intake,protein,net,foods,oura,awaitingOura};
+  const net=intake-out; // negative = deficit
+  return {maint:base,workout,out,intake,protein,net,foods,oura};
 }
 function renderCalories(){
   const p=profile();
   if(!p.activityMult) p.activityMult=1.2;
   document.getElementById("calDate").value=CAL_DAY;
   const t=dayTotals(CAL_DAY);
-  const burnAvailable=t.out!==null;
-  document.getElementById("lMaint").textContent=burnAvailable?fmt0(t.maint)+" kcal":"—";
-  document.getElementById("lWorkout").textContent=burnAvailable?(t.workout?"+":"")+fmt0(t.workout)+" kcal":"—";
-  document.getElementById("lMaintLabel").textContent=t.oura||t.awaitingOura?"Base / resting burn (Oura)":"Resting burn (BMR×activity)";
-  document.getElementById("lWorkoutLabel").textContent=t.oura||t.awaitingOura?"Active burn (Oura)":"Workout burn";
-  document.getElementById("lOut").textContent=burnAvailable?fmt0(t.out)+" kcal":"Waiting for Oura";
+  document.getElementById("lMaint").textContent=fmt0(t.maint)+" kcal";
+  document.getElementById("lWorkout").textContent=(t.workout?"+":"")+fmt0(t.workout)+" kcal";
+  document.getElementById("lMaintLabel").textContent=t.oura?"Base / resting burn (Oura)":"Resting burn (BMR×activity)";
+  document.getElementById("lWorkoutLabel").textContent=t.oura?"Active burn (Oura)":"Workout burn";
+  document.getElementById("lOut").textContent=fmt0(t.out)+" kcal";
   document.getElementById("lIn").textContent=fmt0(t.intake)+" kcal";
-  const deficit=burnAvailable?-t.net:0;
+  const deficit=-t.net;
   const targetDelta=desiredCalorieDelta(p);
-  const deltaGap=burnAvailable?t.net-targetDelta:Infinity;
+  const deltaGap=t.net-targetDelta;
   const lNet=document.getElementById("lNet");
-  lNet.textContent=burnAvailable?(t.net<0?"−":"+")+fmt0(Math.abs(t.net))+" kcal":"—";
-  lNet.style.color=burnAvailable?(Math.abs(deltaGap)<=150?"var(--green)":Math.abs(deltaGap)<=300?"var(--amber)":"var(--red)"):"var(--muted)";
+  lNet.textContent=(t.net<0?"−":"+")+fmt0(Math.abs(t.net))+" kcal";
+  lNet.style.color=Math.abs(deltaGap)<=150?"var(--green)":Math.abs(deltaGap)<=300?"var(--amber)":"var(--red)";
 
-  document.getElementById("netNum").innerHTML = burnAvailable?(t.net<0?"−":"+")+fmt0(Math.abs(t.net))+`<small> kcal</small>`:`—<small> kcal</small>`;
-  document.getElementById("netSub").textContent = t.awaitingOura ? "Oura has not finalized calorie burn for this day yet." : t.intake===0 ? "No food logged yet for this day" :
+  document.getElementById("netNum").innerHTML = (t.net<0?"−":"+")+fmt0(Math.abs(t.net))+`<small> kcal</small>`;
+  document.getElementById("netSub").textContent = t.intake===0 ? "No food logged yet for this day" :
     (targetDelta<0 ? `Target: ${goalText(p)}. Current: ${t.net<0?"−":"+"}${fmt0(Math.abs(t.net))}.` :
     targetDelta>0 ? `Target: ${goalText(p)}. Current: ${t.net<0?"−":"+"}${fmt0(Math.abs(t.net))}.` :
     `Target: maintenance. Current: ${t.net<0?"−":"+"}${fmt0(Math.abs(t.net))}.`);
 
   // bar: food in vs total out
-  const maxv=Math.max(t.out||0,t.intake,1); const fill=document.getElementById("calFill");
-  const pct=burnAvailable?Math.min(100,(t.intake/maxv)*100):0;
-  fill.style.width=pct+"%"; fill.style.background = burnAvailable&&t.intake>t.out?"var(--red)":"var(--green)";
+  const maxv=Math.max(t.out,t.intake,1); const fill=document.getElementById("calFill");
+  const pct=Math.min(100,(t.intake/maxv)*100);
+  fill.style.width=pct+"%"; fill.style.background = t.intake<=t.out?"var(--green)":"var(--red)";
   document.getElementById("barInLbl").textContent="in "+fmt0(t.intake);
-  document.getElementById("barOutLbl").textContent=burnAvailable?"out "+fmt0(t.out):"out —";
+  document.getElementById("barOutLbl").textContent="out "+fmt0(t.out);
 
   // verdict pill
   const v=document.getElementById("calVerdict"); const target=p.deficit_target||400;
-  if(!burnAvailable){ v.innerHTML=`<span class="verdict near">waiting for Oura</span>`; }
-  else if(t.intake===0){ v.innerHTML=`<span class="verdict near">awaiting food</span>`; }
+  if(t.intake===0){ v.innerHTML=`<span class="verdict near">awaiting food</span>`; }
   else if(targetDelta<0 && deficit>=Math.abs(targetDelta)){ v.innerHTML=`<span class="verdict deficit">on track · −${fmt0(deficit)}</span>`; }
   else if(targetDelta<0 && deficit>0){ v.innerHTML=`<span class="verdict near">mild deficit · −${fmt0(deficit)}</span>`; }
   else if(targetDelta>0 && t.net>=targetDelta){ v.innerHTML=`<span class="verdict surplus">on track · +${fmt0(t.net)}</span>`; }
@@ -702,7 +693,7 @@ function drawWeek(){
   const p=profile(); const target=Math.abs(desiredCalorieDelta(p));
   const days=[];
   for(let i=6;i>=0;i--) days.push(addLocalDays(CAL_DAY,-i));
-  const nets=days.map(d=>{ const t=dayTotals(d); return t.intake===0||t.net===null?null:t.net; });
+  const nets=days.map(d=>{ const t=dayTotals(d); return t.intake===0?null:t.net; });
   const ctx=document.getElementById("weekChart"); if(weekChart) weekChart.destroy();
   weekChart=new Chart(ctx,{type:"bar",data:{labels:days.map(fmtDate),datasets:[{data:nets.map(n=>n===null?0:n),
     backgroundColor:nets.map(n=>n===null?"#2c323d":n<0?"#4ade80":"#e3604d"),borderRadius:5,maxBarThickness:34}]},

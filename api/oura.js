@@ -16,7 +16,19 @@ function redirect(res, url) {
   res.end();
 }
 
+function appendCookie(res, value) {
+  const current = res.getHeader('Set-Cookie');
+  const cookies = current ? (Array.isArray(current) ? current : [current]) : [];
+  res.setHeader('Set-Cookie', [...cookies, value]);
+}
+
+function rememberOAuthResult(res, origin, result) {
+  const secure = origin.startsWith('https://') ? '; Secure' : '';
+  appendCookie(res, `oura_oauth_result=${encodeURIComponent(result)}; HttpOnly; SameSite=Lax; Path=/api/oura; Max-Age=600${secure}`);
+}
+
 function errorRedirect(res, origin, message) {
+  rememberOAuthResult(res, origin, message);
   return redirect(res, `${origin}/?oura=error&message=${encodeURIComponent(message)}`);
 }
 
@@ -31,7 +43,7 @@ module.exports = async (req, res) => {
     if (!isConfigured()) return errorRedirect(res, origin, 'not_configured');
     const state = verifyState(req.query?.state);
     const nonce = cookieValue(req, 'oura_oauth_nonce');
-    res.setHeader('Set-Cookie', 'oura_oauth_nonce=; HttpOnly; SameSite=Lax; Path=/api/oura; Max-Age=0');
+    appendCookie(res, 'oura_oauth_nonce=; HttpOnly; SameSite=Lax; Path=/api/oura; Max-Age=0');
     // Some browsers discard the short-lived cookie during the round trip through
     // Oura. The signed, expiring state still binds this callback to the Google
     // user who started it. If the cookie is present, continue to enforce it.
@@ -49,6 +61,7 @@ module.exports = async (req, res) => {
     if (!String(token.scope).split(/[ ,+]+/).includes('daily')) return errorRedirect(res, origin, 'daily_scope_required');
     try {
       await saveToken(state.sub, token);
+      rememberOAuthResult(res, origin, 'connected');
       return redirect(res, `${origin}/?oura=connected`);
     } catch (e) {
       console.error('Oura token storage failed:', e);
@@ -68,7 +81,13 @@ module.exports = async (req, res) => {
   try {
     if (action === 'status') {
       const token = await loadToken(user.sub);
-      return res.status(200).json({ ok: true, configured: true, connected: Boolean(token), connectedAt: token?.connectedAt || null });
+      return res.status(200).json({
+        ok: true,
+        configured: true,
+        connected: Boolean(token),
+        connectedAt: token?.connectedAt || null,
+        lastOAuthResult: cookieValue(req, 'oura_oauth_result') || null,
+      });
     }
     if (action === 'connect') {
       const nonce = crypto.randomBytes(24).toString('base64url');

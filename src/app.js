@@ -920,6 +920,15 @@ document.getElementById("welcomeSave").addEventListener("click",saveWelcomeProfi
 
 let OURA_CONNECTED=false;
 let OURA_RETURN_ERROR="";
+const OURA_ERRORS={
+  not_configured:"Oura credentials are missing from this deployment.",
+  invalid_state:"The Oura login session expired. Please try connecting again.",
+  access_denied:"Oura access was not approved.",
+  missing_code:"Oura did not return an authorization code.",
+  daily_scope_required:"Please approve Daily access when connecting Oura.",
+  token_exchange_failed:"Oura rejected the client ID, secret, or redirect URI.",
+  token_storage_failed:"Oura authorized successfully, but the token could not be saved. Check the server logs.",
+};
 async function ouraCall(action,data={}){
   const response=await fetch("/api/oura",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({idToken:ID_TOKEN,action,...data})});
@@ -951,6 +960,9 @@ async function renderOuraStatus(){
   setOuraUi({configured:true,connected:OURA_CONNECTED,message:"Checking connection…"});
   try{
     const result=await ouraCall("status");
+    if(!result.connected&&result.lastOAuthResult&&OURA_ERRORS[result.lastOAuthResult]){
+      OURA_RETURN_ERROR=OURA_ERRORS[result.lastOAuthResult];
+    }
     setOuraUi({configured:result.configured,connected:result.connected,
       message:!result.connected&&OURA_RETURN_ERROR?OURA_RETURN_ERROR:""});
   }catch(e){ setOuraUi({configured:true,connected:false,message:e.message}); }
@@ -992,16 +1004,7 @@ async function handleOuraReturn(){
     setOuraUi({configured:true,connected:true,message:"Oura connected · importing daily burn…"});
     await syncOuraData(false);
   }else{
-    const errors={
-      not_configured:"Oura credentials are missing from this deployment.",
-      invalid_state:"The Oura login session expired. Please try connecting again.",
-      access_denied:"Oura access was not approved.",
-      missing_code:"Oura did not return an authorization code.",
-      daily_scope_required:"Please approve Daily access when connecting Oura.",
-      token_exchange_failed:"Oura rejected the client ID, secret, or redirect URI.",
-      token_storage_failed:"Oura authorized successfully, but the token could not be saved. Check the server logs.",
-    };
-    OURA_RETURN_ERROR=errors[errorCode]||"Oura could not be connected. Please try again.";
+    OURA_RETURN_ERROR=OURA_ERRORS[errorCode]||"Oura could not be connected. Please try again.";
     setOuraUi({configured:true,connected:false,message:OURA_RETURN_ERROR});
   }
 }

@@ -1280,10 +1280,21 @@ document.getElementById("importBtn").addEventListener("click",()=>{
   const box=document.getElementById("importBox");
   box.style.display = box.style.display==="none" ? "block" : "none";
 });
+function setImportGuide(open){
+  const guide=document.getElementById("importGuide");
+  const toggle=document.getElementById("importGuideToggle");
+  guide.style.display=open?"block":"none";
+  toggle.textContent=open?"Hide guide":"Show me how";
+  toggle.setAttribute("aria-expanded",String(open));
+}
+document.getElementById("importGuideToggle").addEventListener("click",e=>{
+  setImportGuide(e.currentTarget.getAttribute("aria-expanded")!=="true");
+});
 document.getElementById("importCancel").addEventListener("click",()=>{
   document.getElementById("importBox").style.display="none";
   document.getElementById("importText").value="";
   document.getElementById("workoutCsvFile").value="";
+  setImportGuide(false);
 });
 document.getElementById("workoutCsvConfirm").addEventListener("click",async ()=>{
   const input=document.getElementById("workoutCsvFile");

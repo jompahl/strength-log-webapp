@@ -57,8 +57,14 @@ module.exports = async (req, res) => {
       console.error('Oura token exchange failed:', e);
       return errorRedirect(res, origin, 'token_exchange_failed');
     }
-    const token = normalizeToken({ ...data, scope: data.scope || req.query?.scope || '' });
-    if (!String(token.scope).split(/[ ,+]+/).includes('daily')) return errorRedirect(res, origin, 'daily_scope_required');
+    const returnedScope = data.scope || req.query?.scope || '';
+    const token = normalizeToken({ ...data, scope: returnedScope });
+    // Oura does not consistently include `scope` in every server-side OAuth
+    // response. Only reject when it explicitly returns a list without Daily;
+    // the daily_activity request remains the final permission check.
+    if (returnedScope && !String(returnedScope).toLowerCase().split(/[ ,+]+/).includes('daily')) {
+      return errorRedirect(res, origin, 'daily_scope_required');
+    }
     try {
       await saveToken(state.sub, token);
       rememberOAuthResult(res, origin, 'connected');

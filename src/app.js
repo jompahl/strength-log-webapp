@@ -445,8 +445,8 @@ function rowsInTrendRange(rows,rangeKey){
   return rows.filter(row=>Date.parse(row.date+"T00:00:00Z")>=cutoff);
 }
 let CURRENT_EX="Bench Press", CURRENT_METRIC="topweight", chart=null;
-let STRENGTH_RANGE=localStorage.getItem("strengthlog.strengthRange")||"week";
-if(!TREND_RANGES[STRENGTH_RANGE]) STRENGTH_RANGE="week";
+let STRENGTH_RANGE=localStorage.getItem("strengthlog.strengthRange")||"sixMonths";
+if(!TREND_RANGES[STRENGTH_RANGE]) STRENGTH_RANGE="sixMonths";
 
 function metricMeta(name){
   const allSets=[]; strengthEntries().forEach(s=>s.exercises.forEach(e=>{ if(e.name===name) allSets.push(...e.sets); }));
@@ -525,8 +525,8 @@ function buildPR(){
 
 /* ===================== CARDIO ===================== */
 let CARDIO_METRIC="pace", cardioChart=null, CARDIO_ACT=null;
-let CARDIO_RANGE=localStorage.getItem("strengthlog.cardioRange")||"week";
-if(!TREND_RANGES[CARDIO_RANGE]) CARDIO_RANGE="week";
+let CARDIO_RANGE=localStorage.getItem("strengthlog.cardioRange")||"sixMonths";
+if(!TREND_RANGES[CARDIO_RANGE]) CARDIO_RANGE="sixMonths";
 // activities that track distance/pace; everything else is calorie-only
 const DISTANCE_ACTIVITIES=["Run","Walk","Cycle","Row","Swim","Hike"];
 function isDistanceActivity(name){ return DISTANCE_ACTIVITIES.some(a=> (name||"").toLowerCase().startsWith(a.toLowerCase())); }
@@ -818,11 +818,13 @@ function renderWeight(){
 
   // chart: faint daily points + bold rolling avg line
   const labels=w.map(p=>fmtDate(p.date));
+  const dailyValues=w.map(p=>Number(p.kg.toFixed(1)));
+  const averageValues=avg.map(value=>Number(value.toFixed(1)));
   const ctx=document.getElementById("weightChart"); if(weightChart) weightChart.destroy();
   weightChart=new Chart(ctx,{type:"line",data:{labels,datasets:[
-    {label:"Daily", data:w.map(p=>p.kg), borderColor:"rgba(139,147,161,0.25)", backgroundColor:"transparent",
+    {label:"Daily", data:dailyValues, borderColor:"rgba(139,147,161,0.25)", backgroundColor:"transparent",
       borderWidth:1, pointRadius:2.5, pointBackgroundColor:"rgba(139,147,161,0.5)", pointBorderWidth:0, tension:0, order:2},
-    {label:"7-day avg", data:avg, borderColor:"#f5a623", backgroundColor:"transparent",
+    {label:"7-day avg", data:averageValues, borderColor:"#f5a623", backgroundColor:"transparent",
       borderWidth:2.5, pointRadius:0, tension:0.3, order:1}
   ]},
     options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:"index"},
@@ -830,7 +832,7 @@ function renderWeight(){
         tooltip:{backgroundColor:"#0e1116",borderColor:"#2c323d",borderWidth:1,padding:10,
           callbacks:{label:(it)=>`${it.dataset.label}: ${it.raw.toFixed(1)} kg`}}},
       scales:{x:{grid:{color:"rgba(44,50,61,0.4)"},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10},maxRotation:0,autoSkip:true,maxTicksLimit:8}},
-        y:{grid:{color:"rgba(44,50,61,0.5)"},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10},callback:v=>v+" kg"}}}}});
+        y:{grid:{color:"rgba(44,50,61,0.5)"},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10},callback:v=>Number(v).toFixed(1)+" kg"}}}}});
 }
 function saveWeight(){
   const v=parseFloat(document.getElementById("wInput").value);

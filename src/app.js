@@ -48,13 +48,16 @@ let FIRST_PULL_DONE=false;  // becomes true after the initial load; gates pushes
 function syncPayload(){
   return {entries:STORE.entries||[], food:STORE.food||[], weights:STORE.weights||[],
     hiddenFood:STORE.hiddenFood||[], profile:STORE.profile||{}, aiUsage:STORE.aiUsage||[],
-    ouraDaily:STORE.ouraDaily||[],
+    ouraDaily:STORE.ouraDaily||[], withingsLastSync:STORE.withingsLastSync||null,
+    withingsBaseWeight:STORE.withingsBaseWeight||null,
     coachId:STORE.coachId||selectedCoach().id, seedImported:!!STORE.seedImported};
 }
 function applyPayload(d){
   if(!d) return;
   STORE.entries=d.entries||[]; STORE.food=d.food||[]; STORE.weights=d.weights||[];
   STORE.hiddenFood=d.hiddenFood||[]; STORE.aiUsage=d.aiUsage||[]; STORE.ouraDaily=d.ouraDaily||[];
+  STORE.withingsLastSync=d.withingsLastSync||null;
+  STORE.withingsBaseWeight=d.withingsBaseWeight||null;
   if(d.coachId) STORE.coachId=d.coachId;
   if(d.profile&&Object.keys(d.profile).length) STORE.profile=d.profile;
   if(typeof d.seedImported!=="undefined") STORE.seedImported=!!d.seedImported;
@@ -282,7 +285,7 @@ function handleCredential(resp){
   CURRENT_USER=newUser;
   sessionStorage.setItem("idtoken", ID_TOKEN);
   showApp();
-  pullNow().finally(handleOuraReturn);
+  pullNow().finally(handleIntegrationReturns);
 }
 function showApp(){
   document.getElementById("signinOverlay").style.display="none";
@@ -738,7 +741,7 @@ function renderWeight(){
   const subEl=document.getElementById("wRateSub");
   if(!w.length){
     latestEl.innerHTML=`—<small> kg</small>`;
-    rateEl.textContent=""; subEl.textContent="Log your morning weight to start the trend. Withings users: read the number off the app each morning.";
+    rateEl.textContent=""; subEl.textContent="Log your morning weight, or connect Withings in Account for automatic scale sync.";
     if(weightChart) weightChart.destroy();
     const ctx=document.getElementById("weightChart");
     weightChart=new Chart(ctx,{type:"line",data:{labels:[],datasets:[{data:[]}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}});
@@ -797,7 +800,10 @@ function saveWeight(){
   STORE.weights=STORE.weights||[];
   // one entry per day — replace if same date exists
   const existing=STORE.weights.find(x=>x.date===CAL_DAY);
-  if(existing) existing.kg=v; else STORE.weights.push({date:CAL_DAY, kg:v});
+  if(existing){
+    existing.kg=v;
+    delete existing.source; delete existing.measuredAt; delete existing.externalId;
+  }else STORE.weights.push({date:CAL_DAY, kg:v});
   saveStore(STORE);
   document.getElementById("wInput").value="";
   toast("Weight logged ✓");
@@ -885,6 +891,7 @@ document.querySelector(".tabs").addEventListener("click",e=>{ const b=e.target.c
   if(v==="calories"){
     renderCalories();
     maybeAutoSyncOura(true);
+    maybeAutoSyncWithings(true);
   }
 });
 document.getElementById("exSelect").addEventListener("change",e=>{ CURRENT_EX=e.target.value; renderStrength(); });
@@ -1021,6 +1028,98 @@ async function handleOuraReturn(){
   }
 }
 
+let WITHINGS_CONNECTED=false;
+async function withingsCall(action,data={}){
+  const response=await fetch("/api/withings",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({idToken:ID_TOKEN,action,...data})});
+  const result=await response.json().catch(()=>({ok:false,error:"Invalid response from Withings sync."}));
+  if(!result.ok) throw new Error(result.error||"Withings sync failed.");
+  return result;
+}
+function setWithingsUi({configured=true,connected=false,message=""}={}){
+  const toggle=document.getElementById("withingsToggle");
+  const status=document.getElementById("withingsStatus");
+  const actions=document.getElementById("withingsActions");
+  WITHINGS_CONNECTED=connected;
+  toggle.checked=connected;
+  toggle.disabled=!configured||!ID_TOKEN;
+  actions.style.display=connected?"flex":"none";
+  if(message) status.textContent=message;
+  else if(!configured) status.textContent="Withings API credentials still need to be configured.";
+  else if(connected) status.textContent=STORE.withingsLastSync?`Connected · last synced ${new Date(STORE.withingsLastSync).toLocaleString()}`:"Connected · ready to sync";
+  else status.textContent="Off · import scale measurements automatically";
+}
+function mergeWithingsWeights(incoming){
+  STORE.weights=STORE.weights||[];
+  if(STORE.withingsBaseWeight==null&&STORE.profile?.weight_kg) STORE.withingsBaseWeight=STORE.profile.weight_kg;
+  const byDate=new Map(STORE.weights.map(row=>[row.date,row]));
+  incoming.slice().sort((a,b)=>String(a.measuredAt).localeCompare(String(b.measuredAt))).forEach(row=>byDate.set(row.date,row));
+  STORE.weights=[...byDate.values()].sort((a,b)=>a.date.localeCompare(b.date));
+  const latest=STORE.weights[STORE.weights.length-1];
+  if(latest&&STORE.profile){
+    STORE.profile.weight_kg=latest.kg;
+    if(STORE.profile.height_cm&&STORE.profile.age){
+      STORE.profile.bmr=calcBmr(STORE.profile);
+      STORE.profile.maintenance=Math.round(STORE.profile.bmr*Number(STORE.profile.activityMult||1.2));
+    }
+  }
+  STORE.withingsLastSync=new Date().toISOString();
+  saveStore(STORE);
+  if(document.getElementById("syncModal").style.display==="flex") fillAccountProfileForm();
+}
+async function renderWithingsStatus(){
+  if(!ID_TOKEN){ setWithingsUi({configured:false,message:"Sign in to connect Withings."}); return; }
+  setWithingsUi({configured:true,connected:WITHINGS_CONNECTED,message:"Checking connection…"});
+  try{
+    const result=await withingsCall("status");
+    setWithingsUi({configured:result.configured,connected:result.connected,
+      message:result.connected&&(!result.webhookConfigured||!result.webhookSubscribed)?"Connected · refreshes when the app opens; webhook setup is incomplete":""});
+  }catch(e){ setWithingsUi({configured:true,connected:false,message:e.message}); }
+}
+async function syncWithingsData(showMessage=true){
+  if(!ID_TOKEN) return;
+  if(showMessage) setWithingsUi({configured:true,connected:true,message:"Syncing weight history…"});
+  try{
+    const result=await withingsCall("sync");
+    mergeWithingsWeights(result.weights||[]);
+    setWithingsUi({configured:true,connected:true,message:`Connected · ${result.weights.length} measurement${result.weights.length===1?'':'s'} synced`});
+    renderWeight();
+    if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
+  }catch(e){ setWithingsUi({configured:true,connected:true,message:e.message}); }
+}
+async function maybeAutoSyncWithings(force=false){
+  if(!ID_TOKEN) return;
+  try{
+    const status=await withingsCall("status");
+    if(!status.configured||!status.connected) return;
+    WITHINGS_CONNECTED=true;
+    const last=STORE.withingsLastSync;
+    if(force||!last||Date.now()-new Date(last).getTime()>30*60*1000) await syncWithingsData(false);
+  }catch(e){}
+}
+async function handleWithingsReturn(){
+  const params=new URLSearchParams(location.search);
+  const result=params.get("withings");
+  const error=params.get("message")||"";
+  if(!result) return;
+  params.delete("withings"); params.delete("message");
+  history.replaceState({},"",location.pathname+(params.toString()?"?"+params.toString():"")+location.hash);
+  document.getElementById("acctBtn").click();
+  if(result==="connected"){
+    setWithingsUi({configured:true,connected:true,message:"Withings connected · importing weight history…"});
+    await syncWithingsData(false);
+  }else{
+    const errors={not_configured:"Withings credentials are missing from this deployment.",invalid_state:"The Withings login session expired. Please try again.",
+      access_denied:"Withings access was not approved.",missing_code:"Withings did not return an authorization code.",connection_failed:"Withings could not complete authorization. Check the credentials and redirect URI."};
+    setWithingsUi({configured:true,connected:false,message:errors[error]||"Withings could not be connected. Please try again."});
+  }
+}
+async function handleIntegrationReturns(){
+  await handleOuraReturn();
+  await handleWithingsReturn();
+  maybeAutoSyncWithings(false);
+}
+
 // account modal
 const syncModal=document.getElementById("syncModal");
 document.getElementById("acctBtn").addEventListener("click",()=>{
@@ -1030,6 +1129,7 @@ document.getElementById("acctBtn").addEventListener("click",()=>{
   fillAccountProfileForm();
   renderAiUsageStatus();
   renderOuraStatus();
+  renderWithingsStatus();
   syncModal.style.display="flex";
 });
 document.getElementById("acctProfileSave").addEventListener("click",saveAccountProfile);
@@ -1059,6 +1159,38 @@ document.getElementById("ouraToggle").addEventListener("change",async e=>{
     setOuraUi({configured:true,connected:false,message:"Oura sync is off."});
     if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
   }catch(err){ setOuraUi({configured:true,connected:true,message:err.message}); }
+});
+document.getElementById("withingsSyncNow").addEventListener("click",()=>syncWithingsData(true));
+document.getElementById("withingsToggle").addEventListener("change",async e=>{
+  const toggle=e.currentTarget;
+  toggle.disabled=true;
+  if(toggle.checked){
+    try{
+      const result=await withingsCall("connect");
+      location.assign(result.url);
+    }catch(err){ setWithingsUi({configured:true,connected:false,message:err.message}); }
+    return;
+  }
+  if(!confirm("Turn off Withings sync and remove imported Withings measurements from Strength Log?")){
+    setWithingsUi({configured:true,connected:true}); return;
+  }
+  try{
+    await withingsCall("disconnect");
+    STORE.weights=(STORE.weights||[]).filter(row=>row.source!=="withings");
+    STORE.withingsLastSync=null;
+    const remaining=STORE.weights.slice().sort((a,b)=>a.date.localeCompare(b.date));
+    const restored=remaining.length?remaining[remaining.length-1].kg:STORE.withingsBaseWeight;
+    if(restored&&STORE.profile){
+      STORE.profile.weight_kg=restored;
+      STORE.profile.bmr=calcBmr(STORE.profile);
+      STORE.profile.maintenance=Math.round(STORE.profile.bmr*Number(STORE.profile.activityMult||1.2));
+    }
+    STORE.withingsBaseWeight=null;
+    saveStore(STORE);
+    await pushNow();
+    setWithingsUi({configured:true,connected:false,message:"Withings sync is off."});
+    renderWeight();
+  }catch(err){ setWithingsUi({configured:true,connected:true,message:err.message}); }
 });
 
 /* ---- floating coach chat ---- */
@@ -1349,7 +1481,10 @@ function showLogCard(r){
       if(!/^\d{4}-\d{2}-\d{2}$/.test(weighDate)){ toast("Check the date"); return; }
       STORE.weights=STORE.weights||[];
       const existing=STORE.weights.find(w=>w.date===weighDate);
-      if(existing) existing.kg=weight; else STORE.weights.push({date:weighDate,kg:weight});
+      if(existing){
+        existing.kg=weight;
+        delete existing.source; delete existing.measuredAt; delete existing.externalId;
+      }else STORE.weights.push({date:weighDate,kg:weight});
       done(`Logged ${weight.toFixed(1)} kg for ${fmtDate(weighDate)}`);
       renderWeight();
     };
@@ -1547,7 +1682,7 @@ renderStrength();
     ID_TOKEN=saved;
     try{ const p=JSON.parse(atob(saved.split(".")[1]));
       // basic expiry check
-      if(p.exp && p.exp*1000>Date.now()){ CURRENT_USER={email:p.email,name:p.name||p.email}; showApp(); pullNow().finally(handleOuraReturn); return; }
+      if(p.exp && p.exp*1000>Date.now()){ CURRENT_USER={email:p.email,name:p.name||p.email}; showApp(); pullNow().finally(handleIntegrationReturns); return; }
     }catch(e){}
   }
   initGoogle();

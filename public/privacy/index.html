@@ -19,7 +19,7 @@
     <a class="brand" href="/"><span class="dot"></span>Strength Log</a>
     <article>
       <h1>Privacy Policy</h1>
-      <p class="updated">Effective: 27 June 2026</p>
+      <p class="updated">Effective: 28 June 2026</p>
       <p>This policy explains how the operator of Strength Log collects, uses, stores, shares, retains, and deletes personal data when you use the application. Use of the service is also governed by the <a href="/terms">Terms of Service</a>.</p>
 
       <h2>Data we collect</h2>
@@ -27,6 +27,7 @@
         <li><strong>Account data:</strong> your Google account identifier, name, and email address when you sign in.</li>
         <li><strong>Data you enter:</strong> profile details, weight, workouts, food logs, cardio sessions, notes, goals, and chat messages or meal photos you choose to submit.</li>
         <li><strong>Oura data:</strong> if you enable Oura sync, daily total calories, active calories, steps, activity score, sync timestamps, and encrypted OAuth credentials.</li>
+        <li><strong>Withings data:</strong> if you enable Withings sync, weight measurements, measurement timestamps and identifiers, sync timestamps, Withings user identifier, and encrypted OAuth credentials.</li>
         <li><strong>Technical data:</strong> limited operational information required to authenticate, synchronize, secure, and troubleshoot the service.</li>
       </ul>
 
@@ -38,6 +39,10 @@
       <p class="callout"><strong>Oura data is not sent to Anthropic or any other third-party AI service.</strong> It is not used to train, fine-tune, evaluate, or prompt an AI model.</p>
       <p>Strength Log retains synced Oura daily records for no longer than 90 days. Turning off Oura sync revokes the connection and removes stored Oura OAuth credentials and cached Oura records from Strength Log.</p>
 
+      <h2>Withings data</h2>
+      <p>Withings access is optional and requires your explicit authorization. Strength Log requests only the <code>user.metrics</code> permission. It retrieves weight measurements to update your weight history, trend, and current profile weight. Withings may notify Strength Log when a new scale measurement is available; Strength Log then retrieves that measurement from the Withings API.</p>
+      <p>Turning off Withings sync removes the stored Withings OAuth credentials and Withings-sourced measurements from Strength Log. Withings measurements may be included in the minimum fitness context sent to Anthropic only when you choose to use an AI coaching feature.</p>
+
       <h2>AI features</h2>
       <p>If you choose to use coach chat, meal-photo analysis, or AI-assisted file import, the text, image, or file you submit and the minimum non-Oura app context required for that request are sent to Anthropic for processing. These features are optional. Oura API data is excluded from AI requests.</p>
 
@@ -46,20 +51,22 @@
         <li><strong>Google:</strong> authentication and the operator-controlled Google Sheet used for account data storage.</li>
         <li><strong>Vercel:</strong> application hosting and server-side API execution.</li>
         <li><strong>Oura:</strong> authorization and retrieval of daily activity data when you enable Oura sync.</li>
+        <li><strong>Withings:</strong> authorization, retrieval of weight measurements, and measurement notifications when you enable Withings sync.</li>
         <li><strong>Anthropic:</strong> optional AI processing initiated by you.</li>
       </ul>
-      <p>Oura access and refresh tokens are encrypted server-side before storage. No internet service can guarantee absolute security, but reasonable technical measures are used to prevent unauthorized access.</p>
+      <p>Oura and Withings access and refresh tokens are encrypted server-side before storage. No internet service can guarantee absolute security, but reasonable technical measures are used to prevent unauthorized access.</p>
 
       <h2>Sharing and sale</h2>
       <p>Personal data is not sold, rented, used for advertising, or disclosed to unrelated third parties. It is shared with the service providers above only as required to operate the features you choose to use, or when legally required.</p>
 
       <h2>Retention and deletion</h2>
-      <p>Non-Oura account data is kept while your Strength Log account remains in use or until deletion is requested. You may disconnect Oura at any time in Account settings. You may also request access to or deletion of your data. Verified deletion requests, including Oura data, will be completed within 72 hours.</p>
+      <p>General account data is kept while your Strength Log account remains in use or until deletion is requested. You may disconnect Oura or Withings at any time in Account settings. You may also request access to or deletion of your data. Verified deletion requests, including connected-service data, will be completed within 72 hours.</p>
 
       <h2>Your choices</h2>
       <ul>
         <li>Do not enable Oura sync if you do not want Oura data processed by Strength Log.</li>
         <li>Turn off Oura sync at any time to revoke access and remove synced Oura data.</li>
+        <li>Do not enable Withings sync if you do not want Withings measurements processed by Strength Log. Turn it off at any time to remove the connection and imported Withings measurements.</li>
         <li>Avoid AI features if you do not want submitted content processed by Anthropic.</li>
         <li>Request access, correction, export, or deletion of your stored data from the operator.</li>
       </ul>

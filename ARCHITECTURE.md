@@ -11,6 +11,7 @@
 - `api/parse.js` verifies Google sign-in tokens and calls Anthropic for chat/photo parsing.
 - `api/oura.js` handles Oura OAuth, connection status, disconnects, and Daily Activity sync.
 - Oura access and refresh tokens are AES-256-GCM encrypted in the hidden `OuraAuth` sheet; decrypted tokens never reach the browser.
+- Withings access and refresh tokens are AES-256-GCM encrypted in the hidden `WithingsAuth` sheet. Weight webhooks are authenticated with a private callback secret, merged into each user's cloud weight history, and backed up by an in-app refresh.
 - Synced Oura Daily Activity totals are stored in each user's regular data payload and replace estimated calorie output for matching days.
 - AI usage is stored per user in the synced payload as `aiUsage`, with timestamp, provider, model, request type, and token counts returned by Anthropic.
 

@@ -15,6 +15,8 @@ const apiHandlers = {
   '/api/parse': require('../api/parse.js'),
   '/api/import-workouts': require('../api/import-workouts.js'),
   '/api/oura': require('../api/oura.js'),
+  '/api/withings': require('../api/withings.js'),
+  '/api/withings-webhook': require('../api/withings-webhook.js'),
 };
 
 const vite = await createViteServer({

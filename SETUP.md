@@ -38,6 +38,9 @@ Then fill in:
 - `ANTHROPIC_API_KEY` if you also want local AI/photo parsing
 - `OURA_CLIENT_ID`, `OURA_CLIENT_SECRET`, `OURA_REDIRECT_URI`, and
   `OURA_TOKEN_ENCRYPTION_KEY` if you want Oura calorie sync
+- `WITHINGS_CLIENT_ID`, `WITHINGS_CLIENT_SECRET`, `WITHINGS_REDIRECT_URI`,
+  `WITHINGS_TOKEN_ENCRYPTION_KEY`, `WITHINGS_WEBHOOK_URI`, and
+  `WITHINGS_WEBHOOK_SECRET` if you want automatic Withings weight sync
 
 In Google Cloud Console, your OAuth client must include this authorized
 JavaScript origin:
@@ -164,6 +167,37 @@ with friends — they just sign in.
 The app requests only Oura's `daily` scope. Tokens are encrypted server-side and
 stored in a hidden `OuraAuth` tab. Oura Total Burn replaces the app's estimated
 daily output on synced dates, so workout calories are not counted twice.
+
+---
+
+## Part E — Withings weight sync (optional)
+
+1. Create a Public API application in the
+   [Withings Developer Dashboard](https://developer.withings.com/dashboard/).
+2. Register this exact OAuth callback URL:
+
+   ```text
+   https://YOUR-VERCEL-DOMAIN/api/withings
+   ```
+
+3. Add these environment variables in Vercel:
+
+   | Name | Value |
+   |---|---|
+   | `WITHINGS_CLIENT_ID` | the Withings application's client ID |
+   | `WITHINGS_CLIENT_SECRET` | the Withings application's client secret |
+   | `WITHINGS_REDIRECT_URI` | the exact `/api/withings` callback registered above |
+   | `WITHINGS_TOKEN_ENCRYPTION_KEY` | a private random secret, for example from `openssl rand -hex 32` |
+   | `WITHINGS_WEBHOOK_URI` | `https://YOUR-VERCEL-DOMAIN/api/withings-webhook` |
+   | `WITHINGS_WEBHOOK_SECRET` | another private random secret |
+
+4. Redeploy. Users can open **Account** and enable **Sync weight from Withings**.
+
+The app requests only `user.metrics`, imports up to one year of weight history,
+and subscribes each connected user to Withings weight notifications (`appli=1`).
+OAuth tokens are encrypted in a hidden `WithingsAuth` tab. The webhook URL is
+protected by `WITHINGS_WEBHOOK_SECRET`; never place that secret in client code.
+Opening Calories also performs a backup refresh in case a notification was missed.
 
 ---
 

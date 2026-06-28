@@ -32,8 +32,11 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method === 'HEAD') return res.status(200).end();
 
   if (req.method === 'GET') {
+    // Withings' dashboard probes registered URLs without OAuth parameters.
+    if (!req.query?.code && !req.query?.state && !req.query?.error) return res.status(200).json({ ok: true });
     const origin = appOrigin(req);
     if (!isConfigured()) return errorRedirect(res, origin, 'not_configured');
     const state = verifyState(req.query?.state);

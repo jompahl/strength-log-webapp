@@ -9,6 +9,8 @@ function parseBody(body) {
 }
 
 module.exports = async (req, res) => {
+  // Public, data-free health check used by the Withings dashboard URL tester.
+  if (req.method === 'GET' || req.method === 'HEAD') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ ok: false });
   if (!verifyWebhookSecret(req.query?.token)) return res.status(401).json({ ok: false });
   const body = parseBody(req.body);

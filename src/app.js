@@ -729,9 +729,33 @@ function drawProteinWeek(){
 
 /* ---- weight tracking ---- */
 function weights(){ return (STORE.weights||[]).slice().sort((a,b)=> a.date<b.date?-1:1); }
-function rollingAvg(arr, idx, win){
-  // average of up to `win` points ending at idx
-  let s=0,n=0; for(let i=Math.max(0,idx-win+1);i<=idx;i++){ s+=arr[i].kg; n++; } return s/n;
+function weightDayMs(day){ return Date.parse(day+"T00:00:00Z"); }
+function rollingAvg(arr, idx, windowDays){
+  // Calendar-day window, so old sparse weigh-ins never leak into a 7-day average.
+  const end=weightDayMs(arr[idx].date);
+  const start=end-(windowDays-1)*86400000;
+  let sum=0,count=0;
+  for(let i=idx;i>=0;i--){
+    const time=weightDayMs(arr[i].date);
+    if(time<start) break;
+    if(time<=end){ sum+=arr[i].kg; count++; }
+  }
+  return count?sum/count:arr[idx].kg;
+}
+function weeklyWeightRate(arr, averages){
+  if(arr.length<3) return null;
+  const lastIndex=arr.length-1;
+  const lastTime=weightDayMs(arr[lastIndex].date);
+  let refIndex=-1,bestDistance=Infinity,elapsed=0;
+  for(let i=0;i<lastIndex;i++){
+    const days=(lastTime-weightDayMs(arr[i].date))/86400000;
+    if(days<5||days>9) continue;
+    const distance=Math.abs(days-7);
+    if(distance<bestDistance){ refIndex=i; bestDistance=distance; elapsed=days; }
+  }
+  if(refIndex===-1) return null;
+  const rate=(averages[lastIndex]-averages[refIndex])/elapsed*7;
+  return Number.isFinite(rate)?rate:null;
 }
 let weightChart=null;
 function renderWeight(){
@@ -752,18 +776,9 @@ function renderWeight(){
 
   // 7-day rolling average series
   const avg=w.map((p,i)=>rollingAvg(w,i,7));
-  // weekly rate: compare current avg to avg ~7 days earlier (by index, best-effort)
-  let rate=null;
-  if(w.length>=2){
-    // find a point ~7 days before the last date
-    const lastDate=new Date(last.date+"T00:00:00");
-    let refIdx=0;
-    for(let i=0;i<w.length;i++){ const d=new Date(w[i].date+"T00:00:00"); if((lastDate-d)/86400000<=7){ refIdx=i; break; } }
-    const days=Math.max(1,(lastDate-new Date(w[refIdx].date+"T00:00:00"))/86400000);
-    const deltaAvg=avg[w.length-1]-avg[refIdx];
-    rate = days>0 ? deltaAvg/days*7 : null;  // kg per week
-  }
-  if(rate!==null && w.length>=3){
+  // Compare against a real measurement from roughly one calendar week earlier.
+  const rate=weeklyWeightRate(w,avg);
+  if(rate!==null){
     const down=rate<0;
     rateEl.innerHTML=`<span style="color:${down?'var(--green)':'var(--red)'}">${rate>0?'+':''}${rate.toFixed(2)} kg/wk</span>`;
     let msg;
@@ -775,7 +790,7 @@ function renderWeight(){
     subEl.textContent=msg+" (based on the 7-day average, not daily noise)";
   } else {
     rateEl.textContent="";
-    subEl.textContent=`${w.length} weigh-in${w.length>1?'s':''} logged — a few more days and the weekly rate appears.`;
+    subEl.textContent=`${w.length} weigh-in${w.length>1?'s':''} logged — the weekly rate appears after measurements span about seven days.`;
   }
 
   // chart: faint daily points + bold rolling avg line
@@ -1394,12 +1409,9 @@ function historyContext(){
       if(w.length>=3){
         const avg=w.map((p,i)=>rollingAvg(w,i,7));
         const lastAvg=avg[avg.length-1];
-        // rate vs ~7 days earlier
-        const lastDateW=new Date(w[w.length-1].date); let refIdx=0;
-        for(let i=0;i<w.length;i++){ if((lastDateW-new Date(w[i].date))/86400000<=7){ refIdx=i; break; } }
-        const days=Math.max(1,(lastDateW-new Date(w[refIdx].date))/86400000);
-        const rate=((avg[avg.length-1]-avg[refIdx])/days*7).toFixed(2);
-        weightBit=`Weight ${latest}kg, 7-day avg ${lastAvg.toFixed(1)}kg, trend ${rate}kg/week.`;
+        const rate=weeklyWeightRate(w,avg);
+        weightBit=rate===null?`Weight ${latest}kg, 7-day avg ${lastAvg.toFixed(1)}kg; not enough recent calendar coverage for a weekly trend.`:
+          `Weight ${latest}kg, 7-day avg ${lastAvg.toFixed(1)}kg, trend ${rate.toFixed(2)}kg/week.`;
       } else { weightBit=`Weight ${latest}kg (${w.length} weigh-in${w.length>1?'s':''} so far).`; }
     }
 

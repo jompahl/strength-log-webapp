@@ -438,7 +438,15 @@ function exerciseList(){
   const seen={}; strengthEntries().forEach(s=> s.exercises.forEach(e=>{ seen[e.name]=(seen[e.name]||0)+1; }));
   return Object.keys(seen).sort((a,b)=>{ const ga=muscleOf(a),gb=muscleOf(b); if(ga!==gb) return ga<gb?-1:1; return a<b?-1:1; }).map(n=>({name:n,count:seen[n],muscle:muscleOf(n)}));
 }
+const TREND_RANGES={week:{days:7,label:"week"},month:{days:30,label:"month"},sixMonths:{days:183,label:"6 months"},year:{days:365,label:"year"}};
+function rowsInTrendRange(rows,rangeKey){
+  const range=TREND_RANGES[rangeKey]||TREND_RANGES.week;
+  const cutoff=Date.parse(localDateString()+"T00:00:00Z")-range.days*86400000;
+  return rows.filter(row=>Date.parse(row.date+"T00:00:00Z")>=cutoff);
+}
 let CURRENT_EX="Bench Press", CURRENT_METRIC="topweight", chart=null;
+let STRENGTH_RANGE=localStorage.getItem("strengthlog.strengthRange")||"week";
+if(!TREND_RANGES[STRENGTH_RANGE]) STRENGTH_RANGE="week";
 
 function metricMeta(name){
   const allSets=[]; strengthEntries().forEach(s=>s.exercises.forEach(e=>{ if(e.name===name) allSets.push(...e.sets); }));
@@ -446,7 +454,7 @@ function metricMeta(name){
   return {assisted:isAssisted(name),bw,levels};
 }
 function buildStrip(){
-  const ss=strengthEntries(); const types={Push:0,Pull:0,Legs:0,Other:0}; let sets=0,vol=0;
+  const ss=rowsInTrendRange(strengthEntries(),STRENGTH_RANGE); const types={Push:0,Pull:0,Legs:0,Other:0}; let sets=0,vol=0;
   ss.forEach(s=>{ types[s.type]=(types[s.type]||0)+1; s.exercises.forEach(e=>e.sets.forEach(st=>{ sets++; if(typeof st.weight==="number"&&st.weight>0) vol+=st.reps*st.weight; })); });
   document.getElementById("strip").innerHTML=`
     <div class="stat"><div class="k">Sessions</div><div class="v mono">${ss.length}</div></div>
@@ -461,7 +469,8 @@ function buildSelect(){
   if(!list.find(e=>e.name===CURRENT_EX)&&list.length) CURRENT_EX=list[0].name; sel.value=CURRENT_EX;
 }
 function renderStrength(){
-  const meta=metricMeta(CURRENT_EX); const series=exerciseSeries(CURRENT_EX,CURRENT_METRIC);
+  document.querySelectorAll("#strengthRangeSeg button").forEach(button=>button.classList.toggle("on",button.dataset.range===STRENGTH_RANGE));
+  const meta=metricMeta(CURRENT_EX); const series=rowsInTrendRange(exerciseSeries(CURRENT_EX,CURRENT_METRIC),STRENGTH_RANGE);
   document.getElementById("exName").textContent=CURRENT_EX;
   document.getElementById("exTag").textContent=muscleOf(CURRENT_EX);
   document.getElementById("histExName").textContent=CURRENT_EX;
@@ -476,8 +485,8 @@ function renderStrength(){
   const dEl=document.getElementById("exDelta");
   if(series.length>=2){ const a=series[0].value,b=series[series.length-1].value,diff=b-a;
     const cls=diff>0.05?"up":diff<-0.05?"down":"flat"; const arrow=cls==="up"?"▲":cls==="down"?"▼":"●";
-    dEl.innerHTML=`<span class="${cls}">${arrow} ${diff>0?"+":""}${fmt(diff)}${unit}</span> <span style="color:var(--faint)">since start</span>`;
-  } else dEl.innerHTML=`<span class="flat">single session</span>`;
+    dEl.innerHTML=`<span class="${cls}">${arrow} ${diff>0?"+":""}${fmt(diff)}${unit}</span> <span style="color:var(--faint)">selected period</span>`;
+  } else dEl.innerHTML=`<span class="flat">${series.length?'single session':'no sessions'} in selected period</span>`;
   drawLine("mainChart", series, unit, meta);
   buildHist(); buildPR();
 }
@@ -499,7 +508,7 @@ function drawLine(canvasId, series, unit, meta){
 }
 function buildHist(){
   const rows=[]; let runMax=-Infinity;
-  strengthEntries().forEach(s=>s.exercises.forEach(e=>{ if(e.name===CURRENT_EX){ const m=sessionMetric(e,"e1rm"); const pr=m!==null&&m>runMax; if(m!==null&&m>runMax)runMax=m; rows.push({date:s.date,sets:e.sets,e1:m,pr}); } }));
+  rowsInTrendRange(strengthEntries(),STRENGTH_RANGE).forEach(s=>s.exercises.forEach(e=>{ if(e.name===CURRENT_EX){ const m=sessionMetric(e,"e1rm"); const pr=m!==null&&m>runMax; if(m!==null&&m>runMax)runMax=m; rows.push({date:s.date,sets:e.sets,e1:m,pr}); } }));
   rows.reverse(); let html=`<tr><th>Date</th><th>Sets (reps × kg)</th><th class="r">e1RM</th></tr>`;
   rows.forEach(r=>{ const pills=r.sets.map(st=>`<span class="setpill mono">${setLabel(st)}</span>`).join("");
     html+=`<tr><td class="mono" style="white-space:nowrap">${r.date}</td><td>${pills}</td><td class="r mono ${r.pr?'pr':''}">${r.e1===null?"—":fmt(r.e1)}${r.pr?" ★":""}</td></tr>`; });
@@ -516,12 +525,15 @@ function buildPR(){
 
 /* ===================== CARDIO ===================== */
 let CARDIO_METRIC="pace", cardioChart=null, CARDIO_ACT=null;
+let CARDIO_RANGE=localStorage.getItem("strengthlog.cardioRange")||"week";
+if(!TREND_RANGES[CARDIO_RANGE]) CARDIO_RANGE="week";
 // activities that track distance/pace; everything else is calorie-only
 const DISTANCE_ACTIVITIES=["Run","Walk","Cycle","Row","Swim","Hike"];
 function isDistanceActivity(name){ return DISTANCE_ACTIVITIES.some(a=> (name||"").toLowerCase().startsWith(a.toLowerCase())); }
 
 function buildCardio(){
   const all=cardioEntries();
+  document.querySelectorAll("#cardioRangeSeg button").forEach(button=>button.classList.toggle("on",button.dataset.range===CARDIO_RANGE));
   // populate activity selector from logged activities
   const acts=[...new Set(all.map(c=>c.activity||"Cardio"))];
   if(!acts.length) acts.push("Run");
@@ -531,7 +543,7 @@ function buildCardio(){
   sel.innerHTML=acts.map(a=>`<option value="${a.replace(/"/g,'&quot;')}">${a}</option>`).join("");
   sel.value=CARDIO_ACT;
 
-  const ce=all.filter(c=>(c.activity||"Cardio")===CARDIO_ACT);
+  const ce=rowsInTrendRange(all.filter(c=>(c.activity||"Cardio")===CARDIO_ACT),CARDIO_RANGE);
   const distbased=isDistanceActivity(CARDIO_ACT);
 
   // show/hide metric buttons based on activity type; calorie-only forces "calories"
@@ -757,13 +769,16 @@ function weeklyWeightRate(arr, averages){
   const rate=(averages[lastIndex]-averages[refIndex])/elapsed*7;
   return Number.isFinite(rate)?rate:null;
 }
+let WEIGHT_RANGE=localStorage.getItem("strengthlog.weightRange")||"week";
+if(!TREND_RANGES[WEIGHT_RANGE]) WEIGHT_RANGE="week";
 let weightChart=null;
 function renderWeight(){
-  const w=weights();
+  const allWeights=weights();
   const latestEl=document.getElementById("wLatest");
   const rateEl=document.getElementById("wRate");
   const subEl=document.getElementById("wRateSub");
-  if(!w.length){
+  document.querySelectorAll("#weightRangeSeg button").forEach(button=>button.classList.toggle("on",button.dataset.range===WEIGHT_RANGE));
+  if(!allWeights.length){
     latestEl.innerHTML=`—<small> kg</small>`;
     rateEl.textContent=""; subEl.textContent="Log your morning weight, or connect Withings in Account for automatic scale sync.";
     if(weightChart) weightChart.destroy();
@@ -771,26 +786,34 @@ function renderWeight(){
     weightChart=new Chart(ctx,{type:"line",data:{labels:[],datasets:[{data:[]}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}});
     return;
   }
-  const last=w[w.length-1];
+  const last=allWeights[allWeights.length-1];
   latestEl.innerHTML=`${last.kg.toFixed(1)}<small> kg</small>`;
+  const range=TREND_RANGES[WEIGHT_RANGE];
+  const cutoff=weightDayMs(localDateString())-range.days*86400000;
+  const w=allWeights.filter(row=>weightDayMs(row.date)>=cutoff);
 
   // 7-day rolling average series
   const avg=w.map((p,i)=>rollingAvg(w,i,7));
-  // Compare against a real measurement from roughly one calendar week earlier.
-  const rate=weeklyWeightRate(w,avg);
-  if(rate!==null){
-    const down=rate<0;
-    rateEl.innerHTML=`<span style="color:${down?'var(--green)':'var(--red)'}">${rate>0?'+':''}${rate.toFixed(2)} kg/wk</span>`;
+  const weeklyRate=weeklyWeightRate(w,avg);
+  const periodChange=w.length>=2?avg[avg.length-1]-avg[0]:null;
+  const displayedChange=WEIGHT_RANGE==="week"?weeklyRate:periodChange;
+  if(displayedChange!==null){
+    const down=displayedChange<0;
+    const suffix=WEIGHT_RANGE==="week"?"kg/wk":`kg / ${range.label}`;
+    rateEl.innerHTML=`<span style="color:${down?'var(--green)':'var(--red)'}">${displayedChange>0?'+':''}${displayedChange.toFixed(2)} ${suffix}</span>`;
     let msg;
-    const mag=Math.abs(rate);
-    if(down && mag>=0.3 && mag<=0.6) msg="In the ideal cut zone — fat loss with muscle spared.";
-    else if(down && mag<0.3) msg="Slow loss. Fine, or tighten the deficit slightly if you want it faster.";
-    else if(down && mag>0.6) msg="Fast loss — watch your lifts; if they dip, eat a bit more.";
-    else if(!down) msg="Trending up. If shredding is the goal, widen the deficit.";
+    if(WEIGHT_RANGE!=="week") msg=`Change across ${w.length} weigh-in${w.length===1?'':'s'} in the selected ${range.label}.`;
+    else{
+      const mag=Math.abs(displayedChange);
+      if(down && mag>=0.3 && mag<=0.6) msg="In the ideal cut zone — fat loss with muscle spared.";
+      else if(down && mag<0.3) msg="Slow loss. Fine, or tighten the deficit slightly if you want it faster.";
+      else if(down && mag>0.6) msg="Fast loss — watch your lifts; if they dip, eat a bit more.";
+      else msg="Trending up. If shredding is the goal, widen the deficit.";
+    }
     subEl.textContent=msg+" (based on the 7-day average, not daily noise)";
   } else {
     rateEl.textContent="";
-    subEl.textContent=`${w.length} weigh-in${w.length>1?'s':''} logged — the weekly rate appears after measurements span about seven days.`;
+    subEl.textContent=`${w.length} weigh-in${w.length>1?'s':''} in this ${range.label} — more measurements are needed for a trend.`;
   }
 
   // chart: faint daily points + bold rolling avg line
@@ -915,6 +938,15 @@ document.getElementById("metricSeg").addEventListener("click",e=>{ const b=e.tar
 document.getElementById("cardioSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
   document.querySelectorAll("#cardioSeg button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); CARDIO_METRIC=b.dataset.m; buildCardio(); });
 document.getElementById("cardioActSelect").addEventListener("change",e=>{ CARDIO_ACT=e.target.value; CARDIO_METRIC="pace"; buildCardio(); });
+document.getElementById("strengthRangeSeg").addEventListener("click",e=>{
+  const button=e.target.closest("button[data-range]"); if(!button) return;
+  STRENGTH_RANGE=button.dataset.range; localStorage.setItem("strengthlog.strengthRange",STRENGTH_RANGE);
+  buildStrip(); renderStrength();
+});
+document.getElementById("cardioRangeSeg").addEventListener("click",e=>{
+  const button=e.target.closest("button[data-range]"); if(!button) return;
+  CARDIO_RANGE=button.dataset.range; localStorage.setItem("strengthlog.cardioRange",CARDIO_RANGE); buildCardio();
+});
 
 document.getElementById("toggleForm").addEventListener("click",()=>{ const f=document.getElementById("addForm"); const open=f.classList.toggle("open");
   document.getElementById("toggleForm").textContent=open?"Close":"+ Add session"; if(open&&!document.getElementById("exContainer").children.length) resetStrengthForm(); });
@@ -939,6 +971,13 @@ document.getElementById("pActivity").addEventListener("change",e=>{ STORE.profil
 document.getElementById("proPerKg").addEventListener("change",e=>{ STORE.profile.protein_per_kg=parseFloat(e.target.value); saveStore(STORE); renderCalories(); });
 document.getElementById("wSave").addEventListener("click",saveWeight);
 document.getElementById("wInput").addEventListener("keydown",e=>{ if(e.key==="Enter") saveWeight(); });
+document.getElementById("weightRangeSeg").addEventListener("click",e=>{
+  const button=e.target.closest("button[data-range]");
+  if(!button) return;
+  WEIGHT_RANGE=button.dataset.range;
+  localStorage.setItem("strengthlog.weightRange",WEIGHT_RANGE);
+  renderWeight();
+});
 document.getElementById("welcomeSave").addEventListener("click",saveWelcomeProfile);
 ["welcomeWeight","welcomeHeight","welcomeAge","welcomeTarget"].forEach(id=>{
   document.getElementById(id).addEventListener("keydown",e=>{ if(e.key==="Enter") saveWelcomeProfile(); });

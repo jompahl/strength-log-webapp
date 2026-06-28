@@ -197,6 +197,10 @@
         <button data-m="topweight" class="on">Top set</button>
         <button data-m="volume">Volume</button>
       </div>
+      <div class="seg" id="strengthRangeSeg">
+        <button data-range="week" class="on">Week</button><button data-range="month">Month</button>
+        <button data-range="sixMonths">6 months</button><button data-range="year">Year</button>
+      </div>
     </div>
     <div class="exHead">
       <div><span class="name" id="exName"></span><span class="tag" id="exTag"></span></div>
@@ -232,6 +236,10 @@
         <button data-m="pace" class="on">Pace</button>
         <button data-m="distance">Distance</button>
         <button data-m="calories">Calories</button>
+      </div>
+      <div class="seg" id="cardioRangeSeg">
+        <button data-range="week" class="on">Week</button><button data-range="month">Month</button>
+        <button data-range="sixMonths">6 months</button><button data-range="year">Year</button>
       </div>
     </div>
     <div class="card"><div class="chartBox"><canvas id="cardioChart"></canvas></div><div class="miniNote" id="cardioNote"></div></div>
@@ -347,6 +355,12 @@
             <input type="number" id="wInput" step="0.1" placeholder="96.6" style="width:110px"></div>
           <button class="primary" id="wSave">Log</button>
         </div>
+      </div>
+      <div class="seg" id="weightRangeSeg" style="display:inline-flex; margin-bottom:12px">
+        <button data-range="week" class="on">Week</button>
+        <button data-range="month">Month</button>
+        <button data-range="sixMonths">6 months</button>
+        <button data-range="year">Year</button>
       </div>
       <div class="chartBox" style="height:240px"><canvas id="weightChart"></canvas></div>
       <div class="miniNote">Faint dots = daily weigh-ins (they bounce ±1–2 kg from water/food — that's normal). The solid line is your 7-day average — the real signal. Aim for ~0.3–0.5 kg/week down.</div>

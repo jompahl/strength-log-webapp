@@ -35,6 +35,7 @@ Then fill in:
 - `GOOGLE_SA_EMAIL`
 - `GOOGLE_SA_KEY`
 - `SHEET_ID`
+- `SESSION_SECRET` for seven-day login sessions (recommended; generate with `openssl rand -hex 32`)
 - `ANTHROPIC_API_KEY` if you also want local AI/photo parsing
 - `OURA_CLIENT_ID`, `OURA_CLIENT_SECRET`, `OURA_REDIRECT_URI`, and
   `OURA_TOKEN_ENCRYPTION_KEY` if you want Oura calorie sync
@@ -122,7 +123,7 @@ for zero-setup on their side.
 1. Make a free account at https://vercel.com (sign in with GitHub is easiest).
 2. Put this project folder in a GitHub repo (or use the Vercel CLI / drag-and-drop deploy).
 3. In Vercel, **Import** the project. Before deploying, open **Environment Variables**
-   and add these four:
+   and add these five:
 
    | Name | Value |
    |---|---|
@@ -130,9 +131,14 @@ for zero-setup on their side.
    | `GOOGLE_SA_EMAIL`  | the service account `client_email` from A6 |
    | `GOOGLE_SA_KEY`    | the full `private_key` from A6 (paste the whole thing, including the BEGIN/END lines) |
    | `SHEET_ID`         | the Sheet ID from B2 |
+   | `SESSION_SECRET`   | a private random value, for example from `openssl rand -hex 32` |
 
    Note on `GOOGLE_SA_KEY`: paste it exactly as it appears in the JSON. If Vercel mangles
    the line breaks, the code already converts `\n` back to real newlines, so either form works.
+
+   `SESSION_SECRET` signs the app's HttpOnly login cookie. Keep it stable across
+   deployments; changing it signs everyone out. If omitted, the app derives a separate
+   signing key from `GOOGLE_SA_KEY`, but a dedicated value is recommended.
 
 4. **Deploy.** You'll get a URL like `https://strength-log.vercel.app`.
 5. Go back to **Part A8** and make sure that exact URL is in **Authorized JavaScript origins**

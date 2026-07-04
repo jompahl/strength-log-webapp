@@ -1,5 +1,4 @@
 const crypto = require('node:crypto');
-const { OAuth2Client } = require('google-auth-library');
 const { google } = require('googleapis');
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -11,18 +10,9 @@ const OURA_CLIENT_SECRET = process.env.OURA_CLIENT_SECRET;
 const OURA_REDIRECT_URI = process.env.OURA_REDIRECT_URI;
 const TOKEN_SECRET = process.env.OURA_TOKEN_ENCRYPTION_KEY;
 const AUTH_TAB = 'OuraAuth';
-const googleAuth = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 function isConfigured() {
   return Boolean(GOOGLE_CLIENT_ID && SA_EMAIL && SA_KEY && SHEET_ID && OURA_CLIENT_ID && OURA_CLIENT_SECRET && OURA_REDIRECT_URI && TOKEN_SECRET);
-}
-
-async function verifyGoogleUser(idToken) {
-  try {
-    const ticket = await googleAuth.verifyIdToken({ idToken, audience: GOOGLE_CLIENT_ID });
-    const payload = ticket.getPayload();
-    return { sub: payload.sub, email: payload.email };
-  } catch (e) { return null; }
 }
 
 function sheetsClient() {
@@ -183,5 +173,5 @@ async function fetchDailyActivity(accessToken, startDate, endDate) {
 
 module.exports = {
   OURA_CLIENT_ID, OURA_REDIRECT_URI, cookieValue, deleteToken, fetchDailyActivity, isConfigured,
-  loadToken, normalizeToken, saveToken, signState, tokenRequest, usableToken, verifyGoogleUser, verifyState,
+  loadToken, normalizeToken, saveToken, signState, tokenRequest, usableToken, verifyState,
 };

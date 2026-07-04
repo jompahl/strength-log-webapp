@@ -1,34 +1,20 @@
 // api/sync.js — Vercel serverless function
 // Holds the service-account credential (server-side only) and the central Sheet.
-// Verifies each request's Google ID token so a user can only touch their own rows.
+// Verifies each request's Google ID token or signed app session so a user can only touch their own rows.
 
-const { OAuth2Client } = require('google-auth-library');
 const { google } = require('googleapis');
+const { verifyRequestUser } = require('./_auth');
 
 // ---- Environment variables (set these in Vercel project settings) ----
 //   GOOGLE_CLIENT_ID         the OAuth client ID (also used in the frontend)
 //   GOOGLE_SA_EMAIL          service account email
 //   GOOGLE_SA_KEY            service account private key (the long PEM, with \n)
 //   SHEET_ID                 the central spreadsheet ID (from its URL)
-const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const SA_EMAIL  = process.env.GOOGLE_SA_EMAIL;
 const SA_KEY    = (process.env.GOOGLE_SA_KEY || '').replace(/\\n/g, '\n');
 const SHEET_ID  = process.env.SHEET_ID;
 const DATA_TAB  = 'UserData';     // hidden-ish tab holding JSON blobs per user
 const JSON_CHUNK_SIZE = 45000;     // Google Sheets cells cap text at 50,000 characters
-
-const authClient = new OAuth2Client(CLIENT_ID);
-
-// Verify the Google ID token from the browser; returns {sub, email, name} or null.
-async function verifyUser(idToken) {
-  try {
-    const ticket = await authClient.verifyIdToken({ idToken, audience: CLIENT_ID });
-    const p = ticket.getPayload();
-    return { sub: p.sub, email: p.email, name: p.name || p.email };
-  } catch (e) {
-    return null;
-  }
-}
 
 function sheetsClient() {
   const jwt = new google.auth.JWT(SA_EMAIL, null, SA_KEY, [
@@ -152,7 +138,7 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
 
-  if (!CLIENT_ID || !SA_EMAIL || !SA_KEY || !SHEET_ID) {
+  if (!process.env.GOOGLE_CLIENT_ID || !SA_EMAIL || !SA_KEY || !SHEET_ID) {
     return res.status(500).json({ ok: false, error: 'Server not configured (missing env vars).' });
   }
 
@@ -160,7 +146,7 @@ module.exports = async (req, res) => {
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }
   const { idToken, action, data } = body || {};
 
-  const user = await verifyUser(idToken);
+  const user = await verifyRequestUser(req, idToken);
   if (!user) return res.status(401).json({ ok: false, error: 'Sign-in expired or invalid. Please sign in again.' });
 
   try {

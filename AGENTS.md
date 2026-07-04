@@ -19,7 +19,7 @@ The experience should feel conversational. Profile onboarding and general coachi
 
 - Frontend: vanilla JavaScript, HTML, and CSS bundled by Vite.
 - Backend: CommonJS Vercel serverless functions in `api/`.
-- Authentication: Google Identity Services; server functions verify Google ID tokens.
+- Authentication: Google Identity Services for initial sign-in, followed by a signed HttpOnly first-party session with a sliding seven-day inactivity expiry.
 - Primary storage: one operator-owned Google Sheet, keyed by Google `sub`.
 - Local cache: `localStorage` key `strengthlog.v2`.
 - AI provider: Anthropic through server-side endpoints only.
@@ -35,6 +35,7 @@ The experience should feel conversational. Profile onboarding and general coachi
 - `src/seedData.js`: starter/demo data.
 - `src/importWorkoutCsv.js`: deterministic StrengthLog CSV parser.
 - `api/sync.js`: authenticated Google Sheet load/save.
+- `api/session.js`, `api/_auth.js`: Google credential exchange and shared seven-day session verification.
 - `api/parse.js`: conversational coaching, profile/weight/workout/food interpretation, and photo analysis.
 - `api/import-workouts.js`: AI fallback for unknown workout-export formats.
 - `api/oura.js`, `api/_oura.js`: Oura OAuth and daily calorie data.
@@ -57,7 +58,9 @@ The frontend payload is assembled by `syncPayload()` and restored by `applyPaylo
 
 `api/sync.js` stores each user's JSON across cells in the `UserData` sheet because a Google Sheets cell has a 50,000-character limit. It also creates a readable per-user mirror as a best-effort operation.
 
-Never trust a user ID supplied directly by the browser. Verify the Google ID token and use its `sub`. Secrets and third-party OAuth tokens must remain server-side and encrypted before storage.
+Never trust a user ID supplied directly by the browser. Verify the Google ID token or signed first-party session and use its `sub`. Secrets and third-party OAuth tokens must remain server-side and encrypted before storage.
+
+The browser must not persist Google ID tokens. After initial Google verification, `api/session.js` sets a signed, HttpOnly, SameSite login cookie. Protected endpoints accept the shared session through `verifyRequestUser()`. Opening the app renews the cookie; seven inactive days or explicit sign-out ends the session. `SESSION_SECRET` is preferred, with a domain-separated key derived from `GOOGLE_SA_KEY` as the deployment-compatible fallback.
 
 ## Existing integrations and behavior
 
@@ -194,3 +197,51 @@ Therefore the implementation must enforce a hard data boundary:
 8. Update `.env.example`, `SETUP.md`, `ARCHITECTURE.md`, Privacy Policy, and Terms.
 9. Test OAuth return, refresh-token rotation, missed webhooks, deletion, reconnect, and mobile UI.
 10. Build, review the complete diff, then commit and deploy only when requested.
+
+## Future feature — direct StrengthLog sync (PAUSED)
+
+Status: awaiting a response from the StrengthLog team about public, private, or partner API access. Do not reverse engineer StrengthLog's private endpoints, store StrengthLog account passwords, or implement an unofficial scraper. The existing CSV importer remains the supported integration.
+
+### Intended outcome
+
+Let a user explicitly connect their StrengthLog account and automatically synchronize completed workouts, including workout name and date, exercises, set order, reps, load, warm-up state, duration, comments, and stable source identifiers. Repeated synchronization must upsert changed workouts and remove or clearly reconcile deleted workouts without duplicating history.
+
+### Prerequisite
+
+Obtain written confirmation and official documentation from StrengthLog covering:
+
+- authentication, preferably OAuth rather than user credentials;
+- workout-list and workout-detail endpoints;
+- stable workout, exercise, and set identifiers;
+- incremental sync, update timestamps, deletion signals, and webhooks if available;
+- rate limits, retention requirements, permitted data uses, and branding requirements;
+- production-access approval and whether the integration may serve multiple users.
+
+Do not begin implementation until the owner explicitly resumes the feature and provides the official API information.
+
+### Preferred design if API access is granted
+
+- Add a StrengthLog connection card in Account with status, toggle, last sync, and manual refresh.
+- Keep provider logic in dedicated server files such as `api/strengthlog.js` and `api/_strengthlog.js`.
+- Encrypt access and refresh tokens server-side with a dedicated encryption key and hidden auth sheet.
+- Normalize provider workouts into the existing strength-entry schema while preserving `source: "strengthlog"` and stable provider IDs.
+- Import an initial bounded history, then use incremental timestamps or webhooks for later changes.
+- Reconcile by provider ID; never deduplicate solely by workout name or calendar date.
+- Disconnecting must revoke access when supported and remove credentials. Ask the product owner whether imported history should also be removed or retained as a user-controlled copy.
+- Update Privacy Policy, Terms, setup documentation, environment examples, and tests before launch.
+
+### Fallbacks if no API is available
+
+1. Continue the existing StrengthLog CSV workflow. Improve it with incremental re-import, stable `importId` matching, previews, and a clear summary of added, updated, skipped, and duplicate workouts.
+2. Consider Apple Health or Android Health Connect only as a separate native-app project. A browser/PWA cannot directly read HealthKit or Health Connect, and their workout records may not preserve detailed exercises, sets, reps, and loads. Validate exported fields before choosing this route.
+
+### Resume checklist
+
+1. Review StrengthLog's reply and official technical/legal documentation.
+2. Confirm exactly which workout fields and historical range are available.
+3. Decide conflict behavior for edits made in both apps.
+4. Design OAuth, encrypted token storage, refresh, revocation, and deletion.
+5. Add canonical mapping and idempotent upsert/delete logic.
+6. Add Account UI, initial import progress, background refresh, and useful error states.
+7. Test duplicate imports, edited/deleted workouts, token expiry, reconnect, partial failures, time zones, kilograms/pounds, timed sets, bodyweight, assistance, and custom exercises.
+8. Update legal and setup documents, build, review, and deploy only when requested.

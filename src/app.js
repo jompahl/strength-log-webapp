@@ -40,8 +40,10 @@ function saveStore(s){ try{ localStorage.setItem(LS_KEY, JSON.stringify(s)); }ca
 /* ===================== AUTH + CLOUD SYNC ===================== */
 let CLIENT_ID_RESOLVED = "";   // fetched from /api/config at startup
 const API_URL = "/api/sync";
-let ID_TOKEN = null;        // current Google ID token (proof of identity)
+const SESSION_URL = "/api/session";
+let ID_TOKEN = null;        // Google ID token during sign-in, then "session" for the HttpOnly app session
 let CURRENT_USER = null;    // {email, name}
+let GOOGLE_INITIALIZED=false;
 let pushTimer=null;
 let FIRST_PULL_DONE=false;  // becomes true after the initial load; gates pushes
 
@@ -268,13 +270,7 @@ function setSyncStatus(msg,kind){
 }
 
 /* ---- Google Sign-In ---- */
-function handleCredential(resp){
-  ID_TOKEN = resp.credential;
-  let newUser={email:"",name:"Account"};
-  try{
-    const payload=JSON.parse(atob(resp.credential.split(".")[1]));
-    newUser={email:payload.email, name:payload.name||payload.email, sub:payload.sub};
-  }catch(e){}
+function useSignedInUser(newUser, authToken="session"){
   // if switching accounts on this device, wipe local cache so we don't show stale data
   const prevSub=localStorage.getItem("strengthlog.sub");
   if(prevSub && newUser.sub && prevSub!==newUser.sub){
@@ -283,9 +279,50 @@ function handleCredential(resp){
   }
   if(newUser.sub) localStorage.setItem("strengthlog.sub", newUser.sub);
   CURRENT_USER=newUser;
-  sessionStorage.setItem("idtoken", ID_TOKEN);
+  ID_TOKEN=authToken;
+  FIRST_PULL_DONE=false;
+  sessionStorage.removeItem("idtoken");
   showApp();
   pullNow().finally(handleIntegrationReturns);
+}
+async function createAppSession(idToken){
+  const response=await fetch(SESSION_URL,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({idToken})});
+  const result=await response.json().catch(()=>({ok:false}));
+  if(!response.ok||!result.ok||!result.user) throw new Error(result.error||"Could not create app session.");
+  return result.user;
+}
+async function restoreAppSession(){
+  try{
+    const response=await fetch(SESSION_URL,{method:"GET"});
+    if(!response.ok) return false;
+    const result=await response.json();
+    if(!result.ok||!result.authenticated||!result.user) return false;
+    useSignedInUser(result.user);
+    return true;
+  }catch(e){ return false; }
+}
+async function renewAppSession(){
+  if(ID_TOKEN!=="session") return;
+  try{
+    const response=await fetch(SESSION_URL,{method:"GET"});
+    if(response.status===401) requireSignIn();
+  }catch(e){}
+}
+async function handleCredential(resp){
+  let newUser={email:"",name:"Account"};
+  try{
+    const payload=JSON.parse(atob(resp.credential.split(".")[1]));
+    newUser={email:payload.email, name:payload.name||payload.email, sub:payload.sub};
+  }catch(e){}
+  try{
+    newUser=await createAppSession(resp.credential);
+    useSignedInUser(newUser);
+  }catch(e){
+    // Keep the current tab usable if session creation is temporarily unavailable.
+    useSignedInUser(newUser,resp.credential);
+    setSyncStatus("Signed in for this visit, but the 7-day session could not be saved.","err");
+  }
 }
 function showApp(){
   document.getElementById("signinOverlay").style.display="none";
@@ -302,6 +339,7 @@ function requireSignIn(){
   document.getElementById("coachFab").style.display="none";
   document.getElementById("coachOverlay").style.display="none";
   document.getElementById("signinOverlay").style.display="flex";
+  initGoogle();
 }
 function showLocalDevSignIn(message){
   const btnWrap=document.getElementById("gsiButton");
@@ -319,6 +357,7 @@ function showLocalDevSignIn(message){
   });
 }
 function initGoogle(){
+  if(GOOGLE_INITIALIZED) return;
   if(!window.google||!google.accounts){ setTimeout(initGoogle,300); return; }
   if(!CLIENT_ID_RESOLVED){
     // fetch the public client ID from the server, then retry
@@ -330,6 +369,7 @@ function initGoogle(){
     return;
   }
   google.accounts.id.initialize({client_id:CLIENT_ID_RESOLVED, callback:handleCredential, auto_select:true});
+  GOOGLE_INITIALIZED=true;
   google.accounts.id.renderButton(document.getElementById("gsiButton"),
     {theme:"filled_black", size:"large", text:"continue_with", shape:"pill", width:280});
   google.accounts.id.prompt();
@@ -1716,10 +1756,14 @@ document.getElementById("importConfirm").addEventListener("click",async ()=>{
   if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
   setSyncStatus("Imported and saved ✓","ok");
 });
-document.getElementById("signOutBtn").addEventListener("click",()=>{
+document.getElementById("signOutBtn").addEventListener("click",async ()=>{
   syncModal.style.display="none";
   try{ google.accounts.id.disableAutoSelect(); }catch(e){}
+  try{ await fetch(SESSION_URL,{method:"DELETE"}); }catch(e){}
   requireSignIn();
+});
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="visible") renewAppSession();
 });
 
 rebuildDatalist();
@@ -1728,14 +1772,19 @@ buildStrip();
 buildSelect();
 renderStrength();
 
-// Auth init: try to restore a session token, else show sign-in
-(function initAuth(){
+// Restore the signed, HttpOnly seven-day session. Migrate an existing valid
+// sessionStorage Google token once so current users do not have to sign in again.
+(async function initAuth(){
+  if(await restoreAppSession()) return;
   const saved=sessionStorage.getItem("idtoken");
+  sessionStorage.removeItem("idtoken");
   if(saved){
-    ID_TOKEN=saved;
-    try{ const p=JSON.parse(atob(saved.split(".")[1]));
-      // basic expiry check
-      if(p.exp && p.exp*1000>Date.now()){ CURRENT_USER={email:p.email,name:p.name||p.email}; showApp(); pullNow().finally(handleIntegrationReturns); return; }
+    try{
+      const payload=JSON.parse(atob(saved.split(".")[1]));
+      if(payload.exp&&payload.exp*1000>Date.now()){
+        await handleCredential({credential:saved});
+        return;
+      }
     }catch(e){}
   }
   initGoogle();

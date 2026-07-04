@@ -7,8 +7,10 @@
 - `src/app.js` holds the browser-side behavior for auth, charts, logging, sync, and coach chat.
 - `src/seedData.js` holds the starter/demo data.
 - `src/domain.js` holds shared domain constants such as exercise muscle groups and workout calorie estimates.
-- `api/sync.js` verifies Google sign-in tokens and syncs each user's data to the central Google Sheet.
-- `api/parse.js` verifies Google sign-in tokens and calls Anthropic for chat/photo parsing.
+- `api/session.js` exchanges a verified Google sign-in for a signed, HttpOnly first-party session that expires after seven inactive days.
+- `api/_auth.js` verifies Google credentials or the first-party session cookie for protected API routes.
+- `api/sync.js` verifies the signed-in user and syncs each user's data to the central Google Sheet.
+- `api/parse.js` verifies the signed-in user and calls Anthropic for chat/photo parsing.
 - `api/oura.js` handles Oura OAuth, connection status, disconnects, and Daily Activity sync.
 - Oura access and refresh tokens are AES-256-GCM encrypted in the hidden `OuraAuth` sheet; decrypted tokens never reach the browser.
 - Withings access and refresh tokens are AES-256-GCM encrypted in the hidden `WithingsAuth` sheet. Weight webhooks are authenticated with a private callback secret, merged into each user's cloud weight history, and backed up by an in-app refresh.

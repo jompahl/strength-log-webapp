@@ -1,5 +1,4 @@
 const crypto = require('node:crypto');
-const { OAuth2Client } = require('google-auth-library');
 const { google } = require('googleapis');
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -15,7 +14,6 @@ const TOKEN_SECRET = process.env.WITHINGS_TOKEN_ENCRYPTION_KEY;
 const AUTH_TAB = 'WithingsAuth';
 const DATA_TAB = 'UserData';
 const JSON_CHUNK_SIZE = 45000;
-const googleAuth = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 function isConfigured() {
   return Boolean(GOOGLE_CLIENT_ID && SA_EMAIL && SA_KEY && SHEET_ID && WITHINGS_CLIENT_ID &&
@@ -27,14 +25,6 @@ function webhookUrl() {
   const url = new URL(WITHINGS_WEBHOOK_URI);
   url.searchParams.set('token', WITHINGS_WEBHOOK_SECRET);
   return url.toString();
-}
-
-async function verifyGoogleUser(idToken) {
-  try {
-    const ticket = await googleAuth.verifyIdToken({ idToken, audience: GOOGLE_CLIENT_ID });
-    const payload = ticket.getPayload();
-    return { sub: payload.sub, email: payload.email };
-  } catch (e) { return null; }
 }
 
 function sheetsClient() {
@@ -298,5 +288,5 @@ function verifyWebhookSecret(value) {
 module.exports = {
   WITHINGS_CLIENT_ID, WITHINGS_REDIRECT_URI, cookieValue, deleteToken, fetchWeights, isConfigured,
   loadToken, loadTokenByWithingsUserId, mergeWeightsIntoCloud, normalizeToken, notificationRequest,
-  saveToken, signState, tokenRequest, usableToken, verifyGoogleUser, verifyState, verifyWebhookSecret, webhookUrl,
+  saveToken, signState, tokenRequest, usableToken, verifyState, verifyWebhookSecret, webhookUrl,
 };

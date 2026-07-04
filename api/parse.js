@@ -5,22 +5,12 @@
 //   ANTHROPIC_API_KEY   your Anthropic API key (sk-ant-...)
 //   GOOGLE_CLIENT_ID    (reused) to verify the user's sign-in token
 //
-// We still verify the Google ID token so only signed-in users can spend your API budget.
+// We verify the Google credential or signed app session so only signed-in users can spend your API budget.
 
-const { OAuth2Client } = require('google-auth-library');
+const { verifyRequestUser } = require('./_auth');
 
-const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const MODEL = 'claude-sonnet-4-6';
-const authClient = new OAuth2Client(CLIENT_ID);
-
-async function verifyUser(idToken) {
-  try {
-    const ticket = await authClient.verifyIdToken({ idToken, audience: CLIENT_ID });
-    const p = ticket.getPayload();
-    return { sub: p.sub, email: p.email };
-  } catch (e) { return null; }
-}
 
 const SYSTEM = `You are a fitness logging assistant AND a practical nutrition/training coach inside a tracker app.
 Your in-app name is provided in the user's context and always starts with "Coach". Speak in a direct, friendly coaching voice.
@@ -73,7 +63,7 @@ module.exports = async (req, res) => {
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }
   const { idToken, text, image, mediaType, context, history, conversation, localDate } = body || {};
 
-  const user = await verifyUser(idToken);
+  const user = await verifyRequestUser(req, idToken);
   if (!user) return res.status(401).json({ ok: false, error: 'Please sign in again.' });
 
   // Build the Claude message content (text and/or image), prefixed with the snapshots

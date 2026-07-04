@@ -1,7 +1,8 @@
 const crypto = require('node:crypto');
+const { verifyRequestUser } = require('./_auth');
 const {
   OURA_CLIENT_ID, OURA_REDIRECT_URI, cookieValue, deleteToken, fetchDailyActivity, isConfigured,
-  loadToken, normalizeToken, saveToken, signState, tokenRequest, usableToken, verifyGoogleUser, verifyState,
+  loadToken, normalizeToken, saveToken, signState, tokenRequest, usableToken, verifyState,
 } = require('./_oura');
 
 function appOrigin(req) {
@@ -78,7 +79,7 @@ module.exports = async (req, res) => {
   const action = body?.action || 'status';
   if (action === 'status' && !isConfigured()) return res.status(200).json({ ok: true, configured: false, connected: false });
   if (!isConfigured()) return res.status(503).json({ ok: false, error: 'Oura sync is not configured yet.' });
-  const user = await verifyGoogleUser(body?.idToken);
+  const user = await verifyRequestUser(req, body?.idToken);
   if (!user) return res.status(401).json({ ok: false, error: 'Please sign in again.' });
 
   try {

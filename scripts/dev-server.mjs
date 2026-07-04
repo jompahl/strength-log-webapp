@@ -11,6 +11,7 @@ loadEnvFile('.env');
 
 const apiHandlers = {
   '/api/config': require('../api/config.js'),
+  '/api/session': require('../api/session.js'),
   '/api/sync': require('../api/sync.js'),
   '/api/parse': require('../api/parse.js'),
   '/api/import-workouts': require('../api/import-workouts.js'),

@@ -90,6 +90,7 @@ The browser must not persist Google ID tokens. After initial Google verification
 - Dates are local calendar dates in `YYYY-MM-DD`; avoid UTC conversion that moves a measurement or workout to another day.
 - Weight values display with one decimal place.
 - Trend controls offer Week, Month, 6 months, and Year. Strength and Cardio default to 6 months; Weight defaults to Week.
+- The Strength tab has a user-managed current mesocycle (`strengthCycle`: name, start date, planned weeks). It shows the current week and fully completed weeks, syncs with the user's data, and is included in AI history context so next-workout recommendations account for cycle phase and sessions completed within it.
 - Changes save locally first and then debounce to cloud sync after the initial pull.
 - The app must still support local-only development when Google or server configuration is absent.
 - Keep mobile layouts usable and account integration states understandable without developer terminology.

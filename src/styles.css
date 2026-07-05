@@ -36,6 +36,24 @@
   .stat .v{font-size:25px; font-weight:700; margin-top:3px; letter-spacing:-0.01em}
   .stat .v small{font-size:13px; color:var(--muted); font-weight:500}
 
+  .cycleCard{display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,rgba(245,166,35,.10),var(--panel) 42%);border:1px solid rgba(245,166,35,.28);border-radius:12px;padding:16px;margin-bottom:14px}
+  .cycleSummary{flex:1;min-width:0}
+  .cycleEyebrow{color:var(--amber);font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;font-weight:750;margin-bottom:3px}
+  .cycleMain{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+  .cycleMain h2{font-size:18px;line-height:1.25;letter-spacing:-.02em}
+  .cycleWeek{color:#1a1205;background:var(--amber);border-radius:999px;padding:3px 9px;font-size:11.5px;font-weight:800;white-space:nowrap}
+  .cycleMeta{color:var(--muted);font-size:12px;margin-top:5px}
+  .cycleProgress{height:5px;max-width:420px;border-radius:999px;background:var(--line);overflow:hidden;margin-top:10px}
+  .cycleProgress span{display:block;height:100%;border-radius:inherit;background:var(--amber)}
+  .cycleEmpty{color:var(--muted);font-size:12.5px;margin-top:3px}
+  .cycleForm{display:none;flex:1}
+  .cycleCard.editing{align-items:flex-start}
+  .cycleCard.editing .cycleSummary,.cycleCard.editing>#cycleEdit{display:none}
+  .cycleCard.editing .cycleForm{display:block}
+  .cycleNameField{flex:1;min-width:220px}
+  .cycleNameField input{width:100%}
+  .cycleRemove{margin-right:auto;color:var(--red)}
+
   .controls{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:18px}
   select,button,input{font-family:inherit}
   .selWrap{position:relative; flex:1; min-width:200px}
@@ -156,6 +174,11 @@
     .twocol,.ledger{grid-template-columns:1fr}
     .chartBox{height:250px}
     .brand h1{font-size:18px}
+    .cycleCard{align-items:flex-start}
+    .cycleCard:not(.editing){flex-wrap:wrap}
+    .cycleCard:not(.editing) #cycleEdit{width:100%}
+    .cycleForm .frow{align-items:stretch}
+    .cycleNameField{min-width:100%;width:100%}
     input:not([type=checkbox]):not([type=file]),textarea,select{font-size:16px!important}
   }
   @media(prefers-reduced-motion:reduce){*{transition:none!important}.typingDots span{animation:none!important}}

@@ -52,6 +52,7 @@ function syncPayload(){
     hiddenFood:STORE.hiddenFood||[], profile:STORE.profile||{}, aiUsage:STORE.aiUsage||[],
     ouraDaily:STORE.ouraDaily||[], withingsLastSync:STORE.withingsLastSync||null,
     withingsBaseWeight:STORE.withingsBaseWeight||null,
+    strengthCycle:STORE.strengthCycle||null,
     coachId:STORE.coachId||selectedCoach().id, seedImported:!!STORE.seedImported};
 }
 function applyPayload(d){
@@ -60,6 +61,7 @@ function applyPayload(d){
   STORE.hiddenFood=d.hiddenFood||[]; STORE.aiUsage=d.aiUsage||[]; STORE.ouraDaily=d.ouraDaily||[];
   STORE.withingsLastSync=d.withingsLastSync||null;
   STORE.withingsBaseWeight=d.withingsBaseWeight||null;
+  STORE.strengthCycle=d.strengthCycle||null;
   if(d.coachId) STORE.coachId=d.coachId;
   if(d.profile&&Object.keys(d.profile).length) STORE.profile=d.profile;
   if(typeof d.seedImported!=="undefined") STORE.seedImported=!!d.seedImported;
@@ -508,6 +510,88 @@ function buildStrip(){
     <div class="stat"><div class="k">Total sets</div><div class="v mono">${sets}</div></div>
     <div class="stat"><div class="k">Push / Pull / Legs</div><div class="v mono" style="font-size:19px">${types.Push} · ${types.Pull} · ${types.Legs}</div></div>`;
 }
+
+function calendarDayNumber(ymd){
+  if(!validCalendarDate(ymd)) return null;
+  const [year,month,day]=ymd.split("-").map(Number);
+  return Math.floor(Date.UTC(year,month-1,day)/86400000);
+}
+
+function strengthCycleProgress(cycle=STORE.strengthCycle,today=localDateString()){
+  if(!cycle||!validCalendarDate(cycle.startDate)) return null;
+  const elapsedDays=calendarDayNumber(today)-calendarDayNumber(cycle.startDate);
+  const totalWeeks=Number.isInteger(Number(cycle.totalWeeks))?Math.max(1,Math.min(52,Number(cycle.totalWeeks))):null;
+  if(elapsedDays<0) return {elapsedDays,totalWeeks,currentWeek:0,completedWeeks:0,progress:0};
+  const currentWeek=Math.floor(elapsedDays/7)+1;
+  const completedWeeks=Math.floor(elapsedDays/7);
+  return {elapsedDays,totalWeeks,currentWeek,completedWeeks,progress:totalWeeks?Math.min(100,(elapsedDays/(totalWeeks*7))*100):0};
+}
+
+function cyclePhase(progress){
+  if(!progress||progress.currentWeek<1) return "not started";
+  if(!progress.totalWeeks) return "in progress";
+  const ratio=progress.currentWeek/progress.totalWeeks;
+  if(ratio>1) return "past the planned end";
+  if(ratio<=0.34) return "early";
+  if(ratio<=0.75) return "middle";
+  return "late";
+}
+
+function renderStrengthCycle(){
+  const summary=document.getElementById("cycleSummary");
+  const edit=document.getElementById("cycleEdit");
+  const remove=document.getElementById("cycleRemove");
+  const cycle=STORE.strengthCycle;
+  const progress=strengthCycleProgress(cycle);
+  if(!cycle||!progress){
+    summary.innerHTML=`<div class="cycleEyebrow">Current cycle</div><div class="cycleMain"><h2 id="cycleTitle">No active strength cycle</h2></div><div class="cycleEmpty">Add your mesocycle start date so progress and coaching stay in context.</div>`;
+    edit.textContent="Set cycle";
+    remove.style.display="none";
+    return;
+  }
+  const daysUntil=Math.abs(progress.elapsedDays);
+  const weekLabel=progress.currentWeek<1?`Starts in ${daysUntil} day${daysUntil===1?"":"s"}`:
+    `Week ${progress.currentWeek}${progress.totalWeeks?` of ${progress.totalWeeks}`:""}`;
+  const completedLabel=progress.currentWeek<1?`Starts ${cycle.startDate}`:
+    `${progress.completedWeeks} full week${progress.completedWeeks===1?"":"s"} completed · started ${cycle.startDate}`;
+  summary.innerHTML=`<div class="cycleEyebrow">Current cycle</div><div class="cycleMain"><h2 id="cycleTitle">${escapeHtml(cycle.name)}</h2><span class="cycleWeek">${weekLabel}</span></div><div class="cycleMeta">${completedLabel}</div>${progress.totalWeeks?`<div class="cycleProgress" aria-label="Cycle progress"><span style="width:${progress.progress}%"></span></div>`:""}`;
+  edit.textContent="Edit cycle";
+  remove.style.display="";
+}
+
+function openStrengthCycleForm(){
+  const cycle=STORE.strengthCycle||{};
+  document.getElementById("cycleName").value=cycle.name||"Strength mesocycle";
+  document.getElementById("cycleStart").value=cycle.startDate||localDateString();
+  document.getElementById("cycleWeeks").value=cycle.totalWeeks||8;
+  document.querySelector(".cycleCard").classList.add("editing");
+}
+
+function closeStrengthCycleForm(){ document.querySelector(".cycleCard").classList.remove("editing"); }
+
+function saveStrengthCycle(){
+  const name=document.getElementById("cycleName").value.trim();
+  const startDate=document.getElementById("cycleStart").value;
+  const totalWeeks=Number(document.getElementById("cycleWeeks").value);
+  if(!name){ toast("Give the cycle a name"); return; }
+  if(!validCalendarDate(startDate)){ toast("Pick a valid start date"); return; }
+  if(!Number.isInteger(totalWeeks)||totalWeeks<1||totalWeeks>52){ toast("Planned weeks must be between 1 and 52"); return; }
+  STORE.strengthCycle={name,startDate,totalWeeks};
+  saveStore(STORE);
+  closeStrengthCycleForm();
+  renderStrengthCycle();
+  toast("Strength cycle saved ✓");
+}
+
+function strengthCycleCoachContext(strength=strengthEntries()){
+  const cycle=STORE.strengthCycle;
+  const progress=strengthCycleProgress(cycle);
+  if(!cycle||!progress) return "No current strength cycle is set.";
+  if(progress.currentWeek<1) return `[Current strength cycle] ${cycle.name} starts ${cycle.startDate} (${Math.abs(progress.elapsedDays)} days from now).`;
+  const sessionsInCycle=strength.filter(session=>session.date>=cycle.startDate).length;
+  return `[Current strength cycle] ${cycle.name}, started ${cycle.startDate}; currently week ${progress.currentWeek}${progress.totalWeeks?` of ${progress.totalWeeks}`:""}, ${progress.completedWeeks} full weeks completed, ${cyclePhase(progress)} phase, ${sessionsInCycle} strength sessions logged during this cycle.`;
+}
+
 function buildSelect(){
   const sel=document.getElementById("exSelect"); const list=exerciseList(); let html="",lastG=null;
   list.forEach(e=>{ if(e.muscle!==lastG){ if(lastG!==null) html+="</optgroup>"; html+=`<optgroup label="${e.muscle}">`; lastG=e.muscle; } html+=`<option value="${e.name.replace(/"/g,'&quot;')}">${e.name} (${e.count})</option>`; });
@@ -515,6 +599,7 @@ function buildSelect(){
   if(!list.find(e=>e.name===CURRENT_EX)&&list.length) CURRENT_EX=list[0].name; sel.value=CURRENT_EX;
 }
 function renderStrength(){
+  renderStrengthCycle();
   document.querySelectorAll("#strengthRangeSeg button").forEach(button=>button.classList.toggle("on",button.dataset.range===STRENGTH_RANGE));
   const meta=metricMeta(CURRENT_EX); const series=rowsInTrendRange(exerciseSeries(CURRENT_EX,CURRENT_METRIC),STRENGTH_RANGE);
   document.getElementById("exName").textContent=CURRENT_EX;
@@ -1001,6 +1086,18 @@ document.getElementById("toggleForm").addEventListener("click",()=>{ const f=doc
 document.getElementById("cancelBtn").addEventListener("click",()=>{ document.getElementById("addForm").classList.remove("open"); document.getElementById("toggleForm").textContent="+ Add session"; });
 document.getElementById("addExBtn").addEventListener("click",addExBlock);
 document.getElementById("saveBtn").addEventListener("click",saveStrength);
+document.getElementById("cycleEdit").addEventListener("click",openStrengthCycleForm);
+document.getElementById("cycleCancel").addEventListener("click",closeStrengthCycleForm);
+document.getElementById("cycleSave").addEventListener("click",saveStrengthCycle);
+document.getElementById("cycleRemove").addEventListener("click",()=>{
+  if(!STORE.strengthCycle) return;
+  if(!confirm("Remove the current strength cycle? Your workout history will stay untouched.")) return;
+  STORE.strengthCycle=null;
+  saveStore(STORE);
+  closeStrengthCycleForm();
+  renderStrengthCycle();
+  toast("Strength cycle removed");
+});
 
 document.getElementById("toggleCardio").addEventListener("click",()=>{ const f=document.getElementById("cardioForm"); const open=f.classList.toggle("open");
   document.getElementById("toggleCardio").textContent=open?"Close":"+ Add cardio"; if(open) document.getElementById("cDate").value=localDateString(); });
@@ -1466,7 +1563,8 @@ function historyContext(){
     const all=entries();
     const strength=all.filter(e=>e.kind==="strength");
     const cardio=all.filter(e=>e.kind==="cardio");
-    if(!all.length) return "No training history yet.";
+    const cycleBit=strengthCycleCoachContext(strength);
+    if(!all.length) return `${cycleBit} No training history yet.`;
     const firstDate=all[0].date, lastDate=all[all.length-1].date;
 
     // PR / progression for the main compound lifts (by e1RM)
@@ -1530,7 +1628,7 @@ function historyContext(){
       cardioBit=`${cardio.length} cardio sessions, ${totDist}km total. Last: ${last.activity} ${last.distance_km||''}km${last.pace_min_km?' @ '+Math.floor(last.pace_min_km)+':'+String(Math.round((last.pace_min_km%1)*60)).padStart(2,'0')+'/km':''}.`;
     }
 
-    return `[History ${firstDate}–${lastDate}] ${strength.length} strength sessions (~${perWeek}/week; Push ${types.Push}/Pull ${types.Pull}/Legs ${types.Legs}). `
+    return `${cycleBit} [History ${firstDate}–${lastDate}] ${strength.length} strength sessions (~${perWeek}/week; Push ${types.Push}/Pull ${types.Pull}/Legs ${types.Legs}). `
       +`Main lifts — ${liftBits.join("; ")||"none with weights yet"}. `
       +`Recent exercise baselines — ${recentExerciseBits.join("; ")||"none yet"}. `
       +`${weightBit} ${cardioBit}`;

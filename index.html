@@ -189,6 +189,22 @@
 
   <!-- STRENGTH VIEW -->
   <div class="view on" id="view-strength">
+    <section class="cycleCard" aria-labelledby="cycleTitle">
+      <div class="cycleSummary" id="cycleSummary"></div>
+      <button class="ghost" id="cycleEdit" type="button">Set cycle</button>
+      <div class="cycleForm" id="cycleForm">
+        <div class="frow">
+          <div class="field cycleNameField"><label for="cycleName">Cycle name</label><input id="cycleName" type="text" maxlength="80" placeholder="Strength mesocycle"></div>
+          <div class="field"><label for="cycleStart">Start date</label><input id="cycleStart" type="date"></div>
+          <div class="field"><label for="cycleWeeks">Planned weeks</label><input id="cycleWeeks" type="number" min="1" max="52" step="1" inputmode="numeric" placeholder="8"></div>
+        </div>
+        <div class="formActions">
+          <button class="linkBtn cycleRemove" id="cycleRemove" type="button">Remove cycle</button>
+          <button class="ghost" id="cycleCancel" type="button">Cancel</button>
+          <button class="primary" id="cycleSave" type="button">Save cycle</button>
+        </div>
+      </div>
+    </section>
     <div class="strip" id="strip"></div>
     <div class="controls">
       <div class="selWrap"><select id="exSelect"></select></div>

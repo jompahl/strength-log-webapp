@@ -327,6 +327,34 @@
       <div class="miniNote" id="proNote"></div>
     </div>
 
+    <div class="card">
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:12px">
+        <div>
+          <div style="color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:0.08em; font-weight:600">Creatine</div>
+          <div class="bigNum mono" id="creatineNum" style="font-size:30px; margin-top:4px"></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px">
+          <label for="creatineTarget" style="color:var(--faint); font-size:12px">Daily target</label>
+          <select id="creatineTarget" style="padding:7px 28px 7px 11px; font-size:13px">
+            <option value="3">3 g</option>
+            <option value="5" selected>5 g</option>
+            <option value="10">10 g</option>
+            <option value="15">15 g</option>
+            <option value="20">20 g</option>
+          </select>
+        </div>
+      </div>
+      <div class="calBar"><div class="fill" id="creatineFill"></div></div>
+      <div style="display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:var(--faint)">
+        <span id="creatineTaken"></span><span id="creatineTargetLabel"></span>
+      </div>
+      <div class="creatineLogRow">
+        <div class="field"><label for="creatineDose">Total for selected day (g)</label><input type="number" id="creatineDose" min="0" max="20" step="0.5" inputmode="decimal" placeholder="5"></div>
+        <button class="primary" id="creatineSave" type="button">Save amount</button>
+      </div>
+      <div class="miniNote" id="creatineNote"></div>
+    </div>
+
     <div class="twocol">
       <div class="panel">
         <h3>Food log — <span id="foodDayLbl"></span></h3>
@@ -353,6 +381,9 @@
         <h3 style="margin-top:18px">7-day protein</h3>
         <div class="chartBox" style="height:200px"><canvas id="proteinWeekChart"></canvas></div>
         <div class="miniNote">Protein logged per day. Goal line follows your current protein target.</div>
+        <h3 style="margin-top:18px">7-day creatine</h3>
+        <div class="chartBox" style="height:200px"><canvas id="creatineWeekChart"></canvas></div>
+        <div class="miniNote">Creatine logged per day. The daily amount and target are capped at 20 g.</div>
       </div>
     </div>
 

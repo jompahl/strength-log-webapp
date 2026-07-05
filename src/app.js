@@ -49,6 +49,7 @@ let FIRST_PULL_DONE=false;  // becomes true after the initial load; gates pushes
 
 function syncPayload(){
   return {entries:STORE.entries||[], food:STORE.food||[], weights:STORE.weights||[],
+    creatine:STORE.creatine||[],
     hiddenFood:STORE.hiddenFood||[], profile:STORE.profile||{}, aiUsage:STORE.aiUsage||[],
     ouraDaily:STORE.ouraDaily||[], withingsLastSync:STORE.withingsLastSync||null,
     withingsBaseWeight:STORE.withingsBaseWeight||null,
@@ -58,6 +59,7 @@ function syncPayload(){
 function applyPayload(d){
   if(!d) return;
   STORE.entries=d.entries||[]; STORE.food=d.food||[]; STORE.weights=d.weights||[];
+  STORE.creatine=d.creatine||[];
   STORE.hiddenFood=d.hiddenFood||[]; STORE.aiUsage=d.aiUsage||[]; STORE.ouraDaily=d.ouraDaily||[];
   STORE.withingsLastSync=d.withingsLastSync||null;
   STORE.withingsBaseWeight=d.withingsBaseWeight||null;
@@ -418,6 +420,7 @@ function saveWelcomeProfile(){
 let STORE = loadStore();
 if(!STORE.profile) STORE.profile = JSON.parse(JSON.stringify(DB.profile));
 if(!STORE.weights) STORE.weights = [];
+if(!STORE.creatine) STORE.creatine = [];
 if(!STORE.ouraDaily) STORE.ouraDaily = [];
 // never show the built-in demo data in the multi-user app; real data comes from the Sheet
 if(typeof STORE.seedImported==="undefined") STORE.seedImported = true;
@@ -730,6 +733,18 @@ function workoutBurnForDay(day){
   return burn;
 }
 function foodForDay(day){ return foodEntries().filter(f=>f.date===day); }
+function creatineForDay(day){
+  const grams=Number((STORE.creatine||[]).find(entry=>entry.date===day)?.grams||0);
+  return Number.isFinite(grams)?Math.max(0,Math.min(20,grams)):0;
+}
+function creatineTarget(profileData=profile()){
+  const target=Number(profileData.creatine_target_g||5);
+  return [3,5,10,15,20].includes(target)?target:5;
+}
+function setCreatineForDay(day,grams){
+  STORE.creatine=(STORE.creatine||[]).filter(entry=>entry.date!==day);
+  if(grams>0) STORE.creatine.push({date:day,grams});
+}
 function ouraForDay(day){ return (STORE.ouraDaily||[]).find(row=>row.date===day&&row.totalCalories>0)||null; }
 function dayTotals(day,{includeOura=true}={}){
   const p=profile(); const maint=Math.round(p.bmr*parseFloat(p.activityMult||1.2));
@@ -804,6 +819,23 @@ function renderCalories(){
   else if(proGap>0) document.getElementById("proNote").textContent=`${proGap}g to go. A chicken breast (~45g), Greek yogurt (~15g), or a scoop of whey (~25g) closes the gap.`;
   else document.getElementById("proNote").textContent=`Target hit — ${proEaten}g logged. Good protein day for protecting muscle on a cut.`;
 
+  // creatine counter
+  const crTarget=creatineTarget(p);
+  const crTaken=creatineForDay(CAL_DAY);
+  p.creatine_target_g=crTarget;
+  document.getElementById("creatineTarget").value=String(crTarget);
+  document.getElementById("creatineNum").innerHTML=`${fmt(crTaken)}<small> / ${fmt(crTarget)} g</small>`;
+  const crPct=Math.min(100,crTarget?crTaken/crTarget*100:0);
+  const crFill=document.getElementById("creatineFill");
+  crFill.style.width=crPct+"%";
+  crFill.style.background=crTaken>=crTarget?"var(--green)":crTaken>0?"var(--amber)":"var(--blue)";
+  document.getElementById("creatineTaken").textContent=fmt(crTaken)+"g logged";
+  document.getElementById("creatineTargetLabel").textContent=fmt(crTarget)+"g target";
+  document.getElementById("creatineDose").value=crTaken||"";
+  const crGap=Math.max(0,crTarget-crTaken);
+  document.getElementById("creatineNote").textContent=crTaken===0?"No creatine logged for this day.":
+    crGap>0?`${fmt(crGap)}g remaining to reach the selected target.`:"Daily target reached.";
+
   // food list
   document.getElementById("foodDayLbl").textContent=fmtDate(CAL_DAY);
   const fl=document.getElementById("foodList");
@@ -819,6 +851,7 @@ function renderCalories(){
   // 7-day chart
   drawWeek();
   drawProteinWeek();
+  drawCreatineWeek();
   // weight trend
   renderWeight();
 
@@ -868,6 +901,23 @@ function drawProteinWeek(){
       scales:{x:{grid:{display:false},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10}}},
         y:{grid:{color:"rgba(44,50,61,0.5)"},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10},callback:v=>v+"g"},
           suggestedMax:Math.max(proTarget, ...vals, 1)}}}});
+}
+
+let creatineWeekChart=null;
+function drawCreatineWeek(){
+  const target=creatineTarget();
+  const days=[];
+  for(let i=6;i>=0;i--) days.push(addLocalDays(CAL_DAY,-i));
+  const vals=days.map(creatineForDay);
+  const ctx=document.getElementById("creatineWeekChart"); if(creatineWeekChart) creatineWeekChart.destroy();
+  creatineWeekChart=new Chart(ctx,{type:"bar",data:{labels:days.map(fmtDate),datasets:[{data:vals,
+    backgroundColor:vals.map(value=>value>=target?"#4ade80":value>0?"#f5a623":"#2c323d"),
+    borderRadius:5,maxBarThickness:34}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
+      tooltip:{backgroundColor:"#0e1116",borderColor:"#2c323d",borderWidth:1,padding:10,displayColors:false,
+        callbacks:{label:(item)=>fmt(item.raw)+"g creatine"}}},
+      scales:{x:{grid:{display:false},ticks:{color:"#5a626f",font:{family:"SF Mono, monospace",size:10}}},
+        y:{min:0,max:20,grid:{color:"rgba(44,50,61,0.5)"},ticks:{stepSize:5,color:"#5a626f",font:{family:"SF Mono, monospace",size:10},callback:value=>value+"g"}}}}});
 }
 
 /* ---- weight tracking ---- */
@@ -1048,6 +1098,17 @@ function saveFoodEntry(){
   toast("Food added ✓"); renderCalories();
 }
 
+function saveCreatine(){
+  const raw=document.getElementById("creatineDose").value.trim();
+  if(raw===""){ toast("Enter a creatine amount"); return; }
+  const grams=Number(raw);
+  if(!Number.isFinite(grams)||grams<0||grams>20){ toast("Creatine must be between 0 and 20 g"); return; }
+  setCreatineForDay(CAL_DAY,grams);
+  saveStore(STORE);
+  renderCalories();
+  toast(grams>0?`Saved ${fmt(grams)} g creatine ✓`:"Creatine cleared for this day");
+}
+
 function rebuildDatalist(){
   const names=[...new Set(strengthEntries().flatMap(s=>s.exercises.map(e=>e.name)))].sort();
   document.getElementById("exNames").innerHTML=names.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">`).join("");
@@ -1114,6 +1175,15 @@ document.getElementById("dayNext").addEventListener("click",()=>{ CAL_DAY=addLoc
 document.getElementById("dayToday").addEventListener("click",()=>{ CAL_DAY=localDateString(); renderCalories(); });
 document.getElementById("pActivity").addEventListener("change",e=>{ STORE.profile.activityMult=parseFloat(e.target.value); STORE.profile.bmr=calcBmr(STORE.profile); STORE.profile.maintenance=Math.round(STORE.profile.bmr*STORE.profile.activityMult); saveStore(STORE); renderCalories(); });
 document.getElementById("proPerKg").addEventListener("change",e=>{ STORE.profile.protein_per_kg=parseFloat(e.target.value); saveStore(STORE); renderCalories(); });
+document.getElementById("creatineTarget").addEventListener("change",e=>{
+  const target=Number(e.target.value);
+  if(!Number.isFinite(target)||target<1||target>20){ toast("Creatine target must be between 1 and 20 g"); renderCalories(); return; }
+  STORE.profile.creatine_target_g=target;
+  saveStore(STORE);
+  renderCalories();
+});
+document.getElementById("creatineSave").addEventListener("click",saveCreatine);
+document.getElementById("creatineDose").addEventListener("keydown",event=>{ if(event.key==="Enter") saveCreatine(); });
 document.getElementById("wSave").addEventListener("click",saveWeight);
 document.getElementById("wInput").addEventListener("keydown",e=>{ if(e.key==="Enter") saveWeight(); });
 document.getElementById("weightRangeSeg").addEventListener("click",e=>{
@@ -1548,11 +1618,14 @@ function dayContext(){
     const t=dayTotals(today,{includeOura:false});
     const proTarget=Math.round((p.weight_kg||0)*(p.protein_per_kg||2));
     const proEaten=Math.round(t.protein||0);
+    const crTarget=creatineTarget(p);
+    const crTaken=creatineForDay(today);
     const foods=(t.foods||[]).map(f=>f.name).join(", ")||"nothing yet";
     const trainedToday=entries().filter(e=>e.date===today).map(e=>e.kind==="cardio"?(e.activity||"cardio"):(e.type||"strength")).join(", ")||"no workout logged";
     return `Maintenance ${Math.round(t.maint)} kcal, workout burn ${Math.round(t.workout)} kcal, total out ${Math.round(t.out)} kcal. `
       +`Eaten ${Math.round(t.intake)} kcal so far (${t.net<0?Math.abs(Math.round(t.net))+' kcal under maintenance':Math.round(t.net)+' kcal over'}). `
       +`Protein ${proEaten}g of ${proTarget}g target (${Math.max(0,proTarget-proEaten)}g to go). `
+      +`Creatine ${fmt(crTaken)}g of ${fmt(crTarget)}g target (${fmt(Math.max(0,crTarget-crTaken))}g to go). `
       +`Today's food: ${foods}. Training today: ${trainedToday}. Goal: getting leaner while keeping muscle.`;
   }catch(e){ return ""; }
 }
@@ -1750,6 +1823,24 @@ function showLogCard(r){
       CAL_DAY=logDate;
       done("Added "+items.length+" item"+(items.length>1?"s":"")+" for "+fmtDate(logDate));
     };
+  } else if(r.kind==="creatine"){
+    const creatineDate=validCalendarDate(r.date)?r.date:today;
+    const grams=Number(r.grams);
+    box.innerHTML=`<div style="font-weight:650; margin-bottom:8px">Creatine</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px">
+        <label style="font-size:11px;color:var(--muted)">Amount g<input data-cr="grams" type="number" min="0" max="20" step="0.5" value="${Number.isFinite(grams)?grams:''}" style="width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--ink);padding:7px"></label>
+        <label style="font-size:11px;color:var(--muted)">Date<input data-cr="date" type="date" value="${creatineDate}" style="width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--ink);padding:7px"></label>
+      </div>
+      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:6px"><button class="ghost" data-x="c">Skip</button><button class="primary" data-x="ok">Log creatine</button></div>`;
+    box.querySelector('[data-x="ok"]').onclick=()=>{
+      const amount=Number(box.querySelector('[data-cr="grams"]').value);
+      const logDate=box.querySelector('[data-cr="date"]').value;
+      if(!Number.isFinite(amount)||amount<0||amount>20){ toast("Creatine must be between 0 and 20 g"); return; }
+      if(!validCalendarDate(logDate)){ toast("Check the creatine date"); return; }
+      setCreatineForDay(logDate,amount);
+      CAL_DAY=logDate;
+      done(amount>0?`Logged ${fmt(amount)} g creatine for ${fmtDate(logDate)}`:`Cleared creatine for ${fmtDate(logDate)}`);
+    };
   } else if(r.kind==="strength" && r.exercises && r.exercises.length){
     const summary=r.exercises.map(ex=>`${ex.name} — ${ex.sets.map(s=>`${s.reps}×${s.weight===0?'BW':s.weight}`).join(", ")}`).join("<br>");
     box.innerHTML=`<div style="font-weight:650; margin-bottom:8px">🏋 ${r.type||'Strength'} session → today</div>
@@ -1871,7 +1962,7 @@ document.getElementById("importConfirm").addEventListener("click",async ()=>{
   if(!raw){ setSyncStatus("Paste your JSON first.","err"); return; }
   let parsed;
   try{ parsed=JSON.parse(raw); }catch(e){ setSyncStatus("That isn't valid JSON — check you copied the whole cell.","err"); return; }
-  if(!parsed.entries && !parsed.weights && !parsed.food && !parsed.aiUsage){ setSyncStatus("JSON loaded but has no entries/weights/food/aiUsage — is this the right data?","err"); return; }
+  if(!parsed.entries && !parsed.weights && !parsed.food && !parsed.creatine && !parsed.aiUsage){ setSyncStatus("JSON loaded but has no entries/weights/food/creatine/aiUsage — is this the right data?","err"); return; }
   // load into STORE and persist + push to the sheet
   applyPayload(parsed);
   STORE.seedImported=true;

@@ -8,7 +8,7 @@ Strength Log is a mobile-friendly, multi-user fitness web app for:
 
 - strength sessions, sets, estimated 1RM, volume, and personal records;
 - cardio sessions;
-- food, protein, and daily calorie balance;
+- food, protein, creatine, and daily calorie balance;
 - body-weight history and trends;
 - conversational AI-assisted logging and coaching;
 - importing workout history from StrengthLog CSV or an AI-converted text export.
@@ -49,6 +49,7 @@ The frontend payload is assembled by `syncPayload()` and restored by `applyPaylo
 
 - `entries`: strength and cardio entries;
 - `food`, `hiddenFood`;
+- `creatine`: one daily creatine total per date, capped at 20 g;
 - `weights`;
 - `profile`;
 - `aiUsage`;

@@ -13,7 +13,7 @@ Strength Log is a mobile-friendly, multi-user fitness web app for:
 - conversational AI-assisted logging and coaching;
 - importing workout history from StrengthLog CSV or an AI-converted text export.
 
-The experience should feel conversational. Profile onboarding and general coaching must accept information across multiple messages, remember earlier answers, and ask only for genuinely missing details. A dated weight statement should log a measurement for that stated date rather than restarting onboarding.
+The experience should feel conversational. Profile onboarding and general coaching must accept information across multiple messages, remember earlier answers, and ask only for genuinely missing details. A dated weight statement should log a measurement for that stated date rather than restarting onboarding. Food logging must likewise preserve an explicitly stated or relative day instead of silently assigning today.
 
 ## Current stack
 

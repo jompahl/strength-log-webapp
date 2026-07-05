@@ -434,6 +434,12 @@ function localDateString(date=new Date()){
   const d=String(date.getDate()).padStart(2,"0");
   return `${y}-${m}-${d}`;
 }
+function validCalendarDate(value){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(value||"")) return false;
+  const [y,m,d]=value.split("-").map(Number);
+  const date=new Date(y,m-1,d);
+  return date.getFullYear()===y&&date.getMonth()===m-1&&date.getDate()===d;
+}
 function addLocalDays(ymd, days){
   const [y,m,d]=ymd.split("-").map(Number);
   const date=new Date(y,m-1,d);
@@ -1532,6 +1538,7 @@ async function chatSend(){
     CHAT_CONTEXT.push({role:"user",text:text||"[Shared a photo]"});
     if(out.reply && out.reply.trim()) addBubble("coach", out.reply.trim());
     if(out.reply && out.reply.trim()) CHAT_CONTEXT.push({role:"coach",text:out.reply.trim()});
+    if(out.log) CHAT_CONTEXT.push({role:"coach",text:`Proposed ${out.log.kind||"entry"} log: ${JSON.stringify(out.log).slice(0,900)}`});
     if(CHAT_CONTEXT.length>12) CHAT_CONTEXT=CHAT_CONTEXT.slice(-12);
     if(out.log) showLogCard(out.log);
     if(!out.log && (!out.reply||!out.reply.trim())) addBubble("coach","I wasn't sure what you meant there — want to try again?");
@@ -1605,19 +1612,24 @@ function showLogCard(r){
       done("Profile set up. Your calories tab is ready.");
     };
   } else if(r.kind==="food" && r.items && r.items.length){
+    const foodDate=validCalendarDate(r.date)?r.date:today;
     const rows=r.items.map((it,i)=>`<div style="display:flex; gap:6px; align-items:center; margin-bottom:6px">
       <input data-f="name" data-i="${i}" value="${(it.name||'').replace(/"/g,'&quot;')}" style="flex:1; min-width:80px; background:var(--bg); border:1px solid var(--line); border-radius:6px; color:var(--ink); padding:6px 8px; font-size:13px">
       <input data-f="kcal" data-i="${i}" type="number" value="${it.kcal||0}" style="width:62px; background:var(--bg); border:1px solid var(--line); border-radius:6px; color:var(--ink); padding:6px; font-size:13px">kcal
       <input data-f="p" data-i="${i}" type="number" value="${it.p||0}" style="width:48px; background:var(--bg); border:1px solid var(--line); border-radius:6px; color:var(--ink); padding:6px; font-size:13px">P</div>`).join("");
-    box.innerHTML=`<div style="font-weight:650; margin-bottom:8px">🍽 Food → today</div>${rows}
+    box.innerHTML=`<div style="font-weight:650; margin-bottom:8px">🍽 Food</div>
+      <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:8px">Date<input data-f="date" type="date" value="${foodDate}" style="display:block;width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--ink);padding:7px"></label>${rows}
       <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:6px"><button class="ghost" data-x="c">Skip</button><button class="primary" data-x="ok">Add</button></div>`;
     box.querySelector('[data-x="ok"]').onclick=()=>{
+      const logDate=box.querySelector('[data-f="date"]').value;
+      if(!validCalendarDate(logDate)){ toast("Check the food date"); return; }
       const items=r.items.map((it,i)=>({name:box.querySelector(`[data-f="name"][data-i="${i}"]`).value,
         kcal:parseFloat(box.querySelector(`[data-f="kcal"][data-i="${i}"]`).value)||0,
         p:parseFloat(box.querySelector(`[data-f="p"][data-i="${i}"]`).value)||0, c:it.c||0, fat:it.fat||0}));
       STORE.food=STORE.food||[];
-      items.forEach(it=> STORE.food.push({_id:"f"+Date.now()+Math.random().toString(36).slice(2,6), date:today, ...it}));
-      done("Added "+items.length+" item"+(items.length>1?"s":"")+" to today");
+      items.forEach(it=> STORE.food.push({_id:"f"+Date.now()+Math.random().toString(36).slice(2,6), date:logDate, ...it}));
+      CAL_DAY=logDate;
+      done("Added "+items.length+" item"+(items.length>1?"s":"")+" for "+fmtDate(logDate));
     };
   } else if(r.kind==="strength" && r.exercises && r.exercises.length){
     const summary=r.exercises.map(ex=>`${ex.name} — ${ex.sets.map(s=>`${s.reps}×${s.weight===0?'BW':s.weight}`).join(", ")}`).join("<br>");

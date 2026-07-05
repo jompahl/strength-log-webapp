@@ -1438,7 +1438,7 @@ function renderCoachText(text){
 function addTyping(){
   const thread=document.getElementById("chatThread");
   const wrap=document.createElement("div"); wrap.id="typingBubble"; wrap.style.cssText="display:flex; justify-content:flex-start";
-  wrap.innerHTML=`<div style="background:var(--panel2); border:1px solid var(--line); border-radius:14px; padding:11px 15px; color:var(--muted); font-size:13px">…</div>`;
+  wrap.innerHTML=`<div class="typingDots" role="status" aria-label="Coach is typing"><span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span></div>`;
   thread.appendChild(wrap); thread.scrollTop=thread.scrollHeight;
 }
 function removeTyping(){ const t=document.getElementById("typingBubble"); if(t) t.remove(); }

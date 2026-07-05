@@ -145,11 +145,17 @@
   .chatText ul,.chatText ol{margin:6px 0 8px 18px; padding:0}
   .chatText li{margin:3px 0}
   .chatText strong{color:var(--ink); font-weight:800}
+  .typingDots{display:flex;align-items:center;gap:4px;height:14px;background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:10px 14px;color:var(--muted)}
+  .typingDots span{width:5px;height:5px;border-radius:50%;background:currentColor;animation:typingBounce .9s ease-in-out infinite}
+  .typingDots span:nth-child(2){animation-delay:.12s}
+  .typingDots span:nth-child(3){animation-delay:.24s}
+  @keyframes typingBounce{0%,60%,100%{transform:translateY(2px)}30%{transform:translateY(-4px)}}
 
   @media(max-width:720px){
     .strip{grid-template-columns:repeat(2,1fr)}
     .twocol,.ledger{grid-template-columns:1fr}
     .chartBox{height:250px}
     .brand h1{font-size:18px}
+    input:not([type=checkbox]):not([type=file]),textarea,select{font-size:16px!important}
   }
-  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}.typingDots span{animation:none!important}}

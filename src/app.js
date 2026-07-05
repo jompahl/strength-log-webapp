@@ -1482,6 +1482,26 @@ function historyContext(){
       }
     });
 
+    // Give the coach the most recent prior sets for recently used exercises so
+    // feedback on a newly logged workout can be specific rather than generic.
+    const recentExerciseBits=[];
+    const seenExercises=new Set();
+    for(let i=strength.length-1;i>=0&&recentExerciseBits.length<16;i--){
+      const session=strength[i];
+      for(const exercise of session.exercises||[]){
+        if(recentExerciseBits.length>=16) break;
+        const name=String(exercise.name||"").trim();
+        const key=name.toLowerCase();
+        if(!name||seenExercises.has(key)) continue;
+        const sets=(exercise.sets||[]).filter(set=>set?.reps!==null&&set?.reps!==undefined&&set?.weight!==null&&set?.weight!==undefined&&Number.isFinite(Number(set.reps))&&Number.isFinite(Number(set.weight))).slice(0,6);
+        if(!sets.length) continue;
+        seenExercises.add(key);
+        const setSummary=sets.map(set=>`${Number(set.reps)}×${Number(set.weight)===0?"BW":Number(set.weight)+"kg"}`).join(", ");
+        const estimate=!isAssisted(name)&&sets.some(set=>Number(set.weight)>0)?sessionMetric(exercise,"e1rm"):null;
+        recentExerciseBits.push(`${name} (${session.date}): ${setSummary}${estimate!==null?`; e1RM ${estimate.toFixed(1)}kg`:""}`);
+      }
+    }
+
     // training frequency + split balance
     const types={Push:0,Pull:0,Legs:0,Other:0};
     strength.forEach(s=>{ types[s.type]=(types[s.type]||0)+1; });
@@ -1512,6 +1532,7 @@ function historyContext(){
 
     return `[History ${firstDate}–${lastDate}] ${strength.length} strength sessions (~${perWeek}/week; Push ${types.Push}/Pull ${types.Pull}/Legs ${types.Legs}). `
       +`Main lifts — ${liftBits.join("; ")||"none with weights yet"}. `
+      +`Recent exercise baselines — ${recentExerciseBits.join("; ")||"none yet"}. `
       +`${weightBit} ${cardioBit}`;
   }catch(e){ return ""; }
 }

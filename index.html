@@ -132,7 +132,7 @@
         <div style="height:1px; background:var(--line); margin-bottom:12px"></div>
         <div class="field" style="margin-bottom:8px">
           <label>Or paste legacy JSON (from your old sheet's Data cell)</label>
-          <textarea id="importText" placeholder='{"entries":[...],"food":[...],"weights":[...],...}' style="width:100%; min-height:120px; background:var(--panel2); border:1px solid var(--line); border-radius:8px; color:var(--ink); padding:10px; font-size:12px; font-family:ui-monospace,monospace"></textarea>
+          <textarea id="importText" placeholder='{"entries":[...],"food":[...],"foodFavorites":[...],"weights":[...],...}' style="width:100%; min-height:120px; background:var(--panel2); border:1px solid var(--line); border-radius:8px; color:var(--ink); padding:10px; font-size:12px; font-family:ui-monospace,monospace"></textarea>
         </div>
         <div style="display:flex; gap:10px; justify-content:flex-end">
           <button class="ghost" id="importCancel">Cancel</button>
@@ -359,6 +359,16 @@
       <div class="panel">
         <h3>Food log — <span id="foodDayLbl"></span></h3>
         <div id="foodList"></div>
+        <div class="foodFavorites" id="foodFavorites">
+          <div class="favoriteHeader">
+            <div>
+              <div class="favoriteTitle">Favorite foods</div>
+              <div class="favoriteHint">Save a logged food once, then log it again for the selected day.</div>
+            </div>
+            <span id="foodFavoriteCount"></span>
+          </div>
+          <div id="foodFavoriteList"></div>
+        </div>
         <div class="addBar" style="margin-top:14px"><span></span><button class="ghost" id="toggleFood">+ Add food</button></div>
         <div class="form" id="foodForm" style="margin-top:12px; padding:14px">
           <div class="frow">

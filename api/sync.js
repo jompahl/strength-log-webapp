@@ -109,6 +109,7 @@ async function mirror(sheets, user, data) {
     (data.creatine || []).forEach(entry => rows.push(['Creatine', entry.date, 'Daily total', entry.grams, 'g', '']));
     (data.ouraDaily || []).forEach(d => rows.push(['Oura', d.date, 'Daily burn', d.totalCalories || '', d.activeCalories || '', d.steps || '']));
     (data.food || []).forEach(f => rows.push(['Food', f.date, f.name, f.kcal, f.p || 0, '']));
+    (data.foodFavorites || []).forEach(f => rows.push(['Food Favorite', '', f.name, f.kcal, f.p || 0, '']));
     (data.aiUsage || []).forEach(u => rows.push([
       'AI Usage',
       (u.createdAt || '').slice(0, 10),

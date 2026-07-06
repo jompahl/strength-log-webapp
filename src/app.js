@@ -50,6 +50,7 @@ let FIRST_PULL_DONE=false;  // becomes true after the initial load; gates pushes
 function syncPayload(){
   return {entries:STORE.entries||[], food:STORE.food||[], weights:STORE.weights||[],
     creatine:STORE.creatine||[],
+    foodFavorites:STORE.foodFavorites||[],
     hiddenFood:STORE.hiddenFood||[], profile:STORE.profile||{}, aiUsage:STORE.aiUsage||[],
     ouraDaily:STORE.ouraDaily||[], withingsLastSync:STORE.withingsLastSync||null,
     withingsBaseWeight:STORE.withingsBaseWeight||null,
@@ -60,6 +61,7 @@ function applyPayload(d){
   if(!d) return;
   STORE.entries=d.entries||[]; STORE.food=d.food||[]; STORE.weights=d.weights||[];
   STORE.creatine=d.creatine||[];
+  STORE.foodFavorites=d.foodFavorites||[];
   STORE.hiddenFood=d.hiddenFood||[]; STORE.aiUsage=d.aiUsage||[]; STORE.ouraDaily=d.ouraDaily||[];
   STORE.withingsLastSync=d.withingsLastSync||null;
   STORE.withingsBaseWeight=d.withingsBaseWeight||null;
@@ -242,13 +244,14 @@ async function pullNow(){
     if(j.ok){
       const remote=j.data;
       const hasRemote=remote&&((remote.entries&&remote.entries.length)||(remote.food&&remote.food.length)||
+        (remote.foodFavorites&&remote.foodFavorites.length)||
         (remote.weights&&remote.weights.length)||(remote.aiUsage&&remote.aiUsage.length)||
         (remote.ouraDaily&&remote.ouraDaily.length)||(remote.profile&&remote.profile.onboardingComplete));
       if(hasRemote){ applyPayload(remote); FIRST_PULL_DONE=true; }
       else {
         // brand-new account: start blank (no demo history). Mark as initialized so
         // the built-in DB demo data is never merged in, then save the empty state.
-        STORE.entries=STORE.entries||[]; STORE.food=STORE.food||[]; STORE.weights=STORE.weights||[]; STORE.aiUsage=STORE.aiUsage||[];
+        STORE.entries=STORE.entries||[]; STORE.food=STORE.food||[]; STORE.foodFavorites=STORE.foodFavorites||[]; STORE.weights=STORE.weights||[]; STORE.aiUsage=STORE.aiUsage||[];
         STORE.seedImported=true;
         if(STORE.profile) STORE.profile.onboardingComplete=false;
         try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
@@ -278,7 +281,7 @@ function useSignedInUser(newUser, authToken="session"){
   // if switching accounts on this device, wipe local cache so we don't show stale data
   const prevSub=localStorage.getItem("strengthlog.sub");
   if(prevSub && newUser.sub && prevSub!==newUser.sub){
-    STORE={entries:[],food:[],weights:[],hiddenFood:[],profile:JSON.parse(JSON.stringify(DB.profile)),seedImported:false};
+    STORE={entries:[],food:[],foodFavorites:[],weights:[],hiddenFood:[],profile:JSON.parse(JSON.stringify(DB.profile)),seedImported:false};
     try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
   }
   if(newUser.sub) localStorage.setItem("strengthlog.sub", newUser.sub);
@@ -421,6 +424,7 @@ let STORE = loadStore();
 if(!STORE.profile) STORE.profile = JSON.parse(JSON.stringify(DB.profile));
 if(!STORE.weights) STORE.weights = [];
 if(!STORE.creatine) STORE.creatine = [];
+if(!STORE.foodFavorites) STORE.foodFavorites = [];
 if(!STORE.ouraDaily) STORE.ouraDaily = [];
 // never show the built-in demo data in the multi-user app; real data comes from the Sheet
 if(typeof STORE.seedImported==="undefined") STORE.seedImported = true;
@@ -429,6 +433,9 @@ function entries(){ const base = STORE.seedImported ? [] : DB.entries; return ba
 function strengthEntries(){ return entries().filter(e=>e.kind==="strength"); }
 function cardioEntries(){ return entries().filter(e=>e.kind==="cardio"); }
 function foodEntries(){ const hidden=STORE.hiddenFood||[]; const base = STORE.seedImported ? [] : (DB.food||[]); return base.concat(STORE.food||[]).filter(f=>!hidden.includes(f._id)); }
+function foodFavoriteEntries(){
+  return (STORE.foodFavorites||[]).filter(f=>f&&f.name).slice().sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+}
 
 function fmt(n){ if(n===null||n===undefined) return "—"; return (Math.round(n*10)/10).toString(); }
 function fmt0(n){ return Math.round(n).toLocaleString(); }
@@ -761,6 +768,31 @@ function dayTotals(day,{includeOura=true}={}){
   const net=intake-out; // negative = deficit
   return {maint:base,workout,out,intake,protein,net,foods,oura};
 }
+function renderFoodFavorites(){
+  const box=document.getElementById("foodFavorites");
+  const list=document.getElementById("foodFavoriteList");
+  const count=document.getElementById("foodFavoriteCount");
+  if(!box||!list) return;
+  const favorites=foodFavoriteEntries();
+  count.textContent=favorites.length?`${favorites.length} saved`:"";
+  if(!favorites.length){
+    list.innerHTML=`<div class="favoriteEmpty">No favorites yet. Tap ☆ on a logged food to save it here.</div>`;
+    return;
+  }
+  list.innerHTML=favorites.map(f=>`<div class="favoriteFood">
+    <div>
+      <div class="favoriteFoodName">${escapeHtml(f.name)}</div>
+      <div class="macro">${f.p?`<span>P <b>${fmt(f.p)}g</b></span>`:""}${f.c?`<span>C <b>${fmt(f.c)}g</b></span>`:""}${f.fat?`<span>F <b>${fmt(f.fat)}g</b></span>`:""}</div>
+    </div>
+    <div class="favoriteFoodActions">
+      <span class="mono">${fmt0(f.kcal)} kcal</span>
+      <button class="ghost smallBtn" data-log-fav="${f._id}">Log</button>
+      <button class="xBtn" data-remove-fav="${f._id}" title="Remove favorite">✕</button>
+    </div>
+  </div>`).join("");
+  list.querySelectorAll("[data-log-fav]").forEach(b=> b.onclick=()=>logFoodFavorite(b.dataset.logFav));
+  list.querySelectorAll("[data-remove-fav]").forEach(b=> b.onclick=()=>removeFoodFavorite(b.dataset.removeFav));
+}
 function renderCalories(){
   const p=profile();
   if(!p.activityMult) p.activityMult=1.2;
@@ -841,12 +873,18 @@ function renderCalories(){
   const fl=document.getElementById("foodList");
   if(!t.foods.length){ fl.innerHTML=`<div style="color:var(--faint);font-size:13px;padding:8px 0">Nothing logged. Snap a meal photo in chat and I'll give you the numbers, or add manually below.</div>`; }
   else{
-    fl.innerHTML=t.foods.map((f,i)=>`<div class="foodItem"><div><div style="font-weight:600">${f.name}</div>
+    fl.innerHTML=t.foods.map((f,i)=>{
+      const isFav=!!findFavoriteForFood(f);
+      return `<div class="foodItem"><div><div style="font-weight:600">${escapeHtml(f.name)}</div>
       <div class="macro">${f.p?`<span>P <b>${f.p}g</b></span>`:""}${f.c?`<span>C <b>${f.c}g</b></span>`:""}${f.fat?`<span>F <b>${f.fat}g</b></span>`:""}</div></div>
       <div style="display:flex;align-items:center;gap:10px"><span class="mono" style="font-weight:700">${fmt0(f.kcal)}</span>
-      <button class="xBtn" data-fi="${f._id}">✕</button></div></div>`).join("");
+      <button class="foodFavBtn ${isFav?"on":""}" data-fav-food="${f._id}" title="${isFav?"Already in favorites":"Add to favorites"}" aria-label="${isFav?"Already in favorites":"Add to favorites"}">${isFav?"★":"☆"}</button>
+      <button class="xBtn" data-fi="${f._id}">✕</button></div></div>`;
+    }).join("");
+    fl.querySelectorAll("[data-fav-food]").forEach(b=> b.onclick=()=>{ addFoodFavorite(b.dataset.favFood); });
     fl.querySelectorAll("[data-fi]").forEach(b=> b.onclick=()=>{ removeFood(b.dataset.fi); });
   }
+  renderFoodFavorites();
 
   // 7-day chart
   drawWeek();
@@ -1039,6 +1077,77 @@ function removeFood(id){
     STORE.hiddenFood=STORE.hiddenFood||[]; if(!STORE.hiddenFood.includes(id)) STORE.hiddenFood.push(id);
   }
   saveStore(STORE); renderCalories(); toast("Removed");
+}
+
+function foodFavoriteKey(food){
+  return [
+    (food.name||"").trim().toLowerCase(),
+    Number(food.kcal||0),
+    Number(food.p||0),
+    Number(food.c||0),
+    Number(food.fat||0),
+  ].join("|");
+}
+function favoriteFromFood(food){
+  return {
+    _id:"fav"+Date.now()+Math.random().toString(36).slice(2,6),
+    name:(food.name||"").trim(),
+    kcal:Number(food.kcal||0),
+    p:Number(food.p||0),
+    c:Number(food.c||0),
+    fat:Number(food.fat||0),
+    createdAt:new Date().toISOString(),
+  };
+}
+function findFoodById(id){ return foodEntries().find(f=>String(f._id)===String(id)); }
+function findFavoriteForFood(food){
+  if(!food) return null;
+  const key=foodFavoriteKey(food);
+  return (STORE.foodFavorites||[]).find(f=>foodFavoriteKey(f)===key)||null;
+}
+function addFoodFavorite(id){
+  const food=findFoodById(id);
+  if(!food){ toast("Food not found"); return; }
+  const favorite=favoriteFromFood(food);
+  if(!favorite.name||favorite.kcal<=0){ toast("Need a name and calories to favorite this"); return; }
+  if(findFavoriteForFood(favorite)){ toast("Already in favorites"); return; }
+  STORE.foodFavorites=STORE.foodFavorites||[];
+  STORE.foodFavorites.push(favorite);
+  saveStore(STORE);
+  renderCalories();
+  toast("Added to favorites ★");
+}
+function removeFoodFavorite(id){
+  STORE.foodFavorites=(STORE.foodFavorites||[]).filter(f=>String(f._id)!==String(id));
+  saveStore(STORE);
+  renderCalories();
+  toast("Favorite removed");
+}
+function logFoodFavorite(id){
+  const fav=(STORE.foodFavorites||[]).find(f=>String(f._id)===String(id));
+  if(!fav){ toast("Favorite not found"); return; }
+  STORE.food=STORE.food||[];
+  STORE.food.push({
+    _id:"f"+Date.now()+Math.random().toString(36).slice(2,6),
+    date:CAL_DAY,
+    name:fav.name,
+    kcal:Number(fav.kcal||0),
+    p:Number(fav.p||0),
+    c:Number(fav.c||0),
+    fat:Number(fav.fat||0),
+    favoriteId:fav._id,
+  });
+  saveStore(STORE);
+  renderCalories();
+  toast(`Logged ${fav.name} ✓`);
+}
+function addFoodFavoriteFromEntry(food){
+  const favorite=favoriteFromFood(food);
+  if(!favorite.name||favorite.kcal<=0) return false;
+  if(findFavoriteForFood(favorite)) return false;
+  STORE.foodFavorites=STORE.foodFavorites||[];
+  STORE.foodFavorites.push(favorite);
+  return true;
 }
 
 /* ===================== FORMS ===================== */
@@ -1740,6 +1849,32 @@ document.getElementById("chatSend").addEventListener("click",chatSend);
 document.getElementById("chatText").addEventListener("keydown",e=>{ if(e.key==="Enter") chatSend(); });
 
 // An inline, editable confirmation card placed in the chat thread
+function showFoodFavoritePrompt(loggedFoods){
+  const candidates=(loggedFoods||[]).filter(food=>food&&food.name&&Number(food.kcal)>0&&!findFavoriteForFood(food));
+  if(!candidates.length) return;
+  const thread=document.getElementById("chatThread");
+  const wrap=document.createElement("div");
+  wrap.style.cssText="display:flex; justify-content:flex-start";
+  const box=document.createElement("div");
+  box.style.cssText="max-width:90%; background:var(--panel2); border:1px solid var(--line); border-radius:14px; border-bottom-left-radius:4px; padding:12px 13px; font-size:13px";
+  const names=candidates.slice(0,3).map(f=>escapeHtml(f.name)).join(", ");
+  const more=candidates.length>3?` + ${candidates.length-3} more`:"";
+  box.innerHTML=`<div style="font-weight:650; margin-bottom:6px">Save to favorite foods?</div>
+    <div style="color:var(--muted); margin-bottom:10px">Want me to save ${names}${more} so you can log ${candidates.length===1?"it":"them"} again quickly?</div>
+    <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap"><button class="ghost" data-fav-choice="no">No thanks</button><button class="primary" data-fav-choice="yes">Save favorite${candidates.length===1?"":"s"}</button></div>`;
+  wrap.appendChild(box); thread.appendChild(wrap); thread.scrollTop=thread.scrollHeight;
+  box.querySelector('[data-fav-choice="no"]').onclick=()=>{
+    box.innerHTML=`<span style="color:var(--muted); font-weight:650">No problem — not saved to favorites.</span>`;
+    thread.scrollTop=thread.scrollHeight;
+  };
+  box.querySelector('[data-fav-choice="yes"]').onclick=()=>{
+    const added=candidates.reduce((count,food)=>count+(addFoodFavoriteFromEntry(food)?1:0),0);
+    saveStore(STORE);
+    if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
+    box.innerHTML=`<span style="color:var(--green); font-weight:650">✓ Saved ${added} favorite${added===1?"":"s"}</span>`;
+    thread.scrollTop=thread.scrollHeight;
+  };
+}
 function showLogCard(r){
   const thread=document.getElementById("chatThread");
   const today=localDateString();
@@ -1819,9 +1954,11 @@ function showLogCard(r){
         kcal:parseFloat(box.querySelector(`[data-f="kcal"][data-i="${i}"]`).value)||0,
         p:parseFloat(box.querySelector(`[data-f="p"][data-i="${i}"]`).value)||0, c:it.c||0, fat:it.fat||0}));
       STORE.food=STORE.food||[];
-      items.forEach(it=> STORE.food.push({_id:"f"+Date.now()+Math.random().toString(36).slice(2,6), date:logDate, ...it}));
+      const loggedItems=items.map(it=>({_id:"f"+Date.now()+Math.random().toString(36).slice(2,6), date:logDate, ...it}));
+      loggedItems.forEach(it=> STORE.food.push(it));
       CAL_DAY=logDate;
       done("Added "+items.length+" item"+(items.length>1?"s":"")+" for "+fmtDate(logDate));
+      showFoodFavoritePrompt(loggedItems);
     };
   } else if(r.kind==="creatine"){
     const creatineDate=validCalendarDate(r.date)?r.date:today;
@@ -1962,7 +2099,7 @@ document.getElementById("importConfirm").addEventListener("click",async ()=>{
   if(!raw){ setSyncStatus("Paste your JSON first.","err"); return; }
   let parsed;
   try{ parsed=JSON.parse(raw); }catch(e){ setSyncStatus("That isn't valid JSON — check you copied the whole cell.","err"); return; }
-  if(!parsed.entries && !parsed.weights && !parsed.food && !parsed.creatine && !parsed.aiUsage){ setSyncStatus("JSON loaded but has no entries/weights/food/creatine/aiUsage — is this the right data?","err"); return; }
+  if(!parsed.entries && !parsed.weights && !parsed.food && !parsed.foodFavorites && !parsed.creatine && !parsed.aiUsage){ setSyncStatus("JSON loaded but has no entries/weights/food/favorites/creatine/aiUsage — is this the right data?","err"); return; }
   // load into STORE and persist + push to the sheet
   applyPayload(parsed);
   STORE.seedImported=true;

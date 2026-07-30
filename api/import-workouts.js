@@ -1,8 +1,7 @@
 // AI-assisted converter for text-based workout exports with unknown schemas.
 const { verifyRequestUser } = require('./_auth');
+const { generate } = require('./_ai');
 
-const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-const MODEL = 'claude-sonnet-4-6';
 const MAX_FILE_CHARS = 250000;
 
 const SYSTEM = `You convert exported workout data into Strength Log's canonical JSON schema.
@@ -73,7 +72,6 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
-  if (!ANTHROPIC_KEY) return res.status(500).json({ ok: false, error: 'Server missing ANTHROPIC_API_KEY.' });
 
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }
@@ -84,24 +82,10 @@ module.exports = async (req, res) => {
   if (fileText.length > MAX_FILE_CHARS) return res.status(413).json({ ok: false, error: 'This file is too large for AI import (maximum 250 KB).' });
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 24000,
-        system: SYSTEM,
-        messages: [{ role: 'user', content: `File name: ${plainText(body?.fileName || 'workout export', 200)}\n\n<workout_export>\n${fileText}\n</workout_export>` }],
-      }),
-    });
-    const data = await response.json();
-    if (data.error) return res.status(502).json({ ok: false, error: data.error.message || 'AI import error' });
-    if (data.stop_reason === 'max_tokens') return res.status(422).json({ ok: false, error: 'The converted data was too large. Try a smaller export or split it by date.' });
-    const output = (data.content || []).filter(block => block.type === 'text').map(block => block.text).join('').replace(/```json|```/g, '').trim();
+    const content = [{ type: 'text', text: `File name: ${plainText(body?.fileName || 'workout export', 200)}\n\n<workout_export>\n${fileText}\n</workout_export>` }];
+    const out = await generate({ sub: user.sub, system: SYSTEM, content, maxTokens: 24000 });
+    if (out.stopReason === 'max_tokens' || out.stopReason === 'length') return res.status(422).json({ ok: false, error: 'The converted data was too large. Try a smaller export or split it by date.' });
+    const output = out.text.replace(/```json|```/g, '').trim();
     let parsed;
     try { parsed = JSON.parse(output); }
     catch (e) { return res.status(422).json({ ok: false, error: 'The AI could not convert this file reliably.' }); }
@@ -113,12 +97,12 @@ module.exports = async (req, res) => {
       entries,
       warnings,
       usage: {
-        provider: 'anthropic', model: MODEL, requestType: 'file-import',
-        inputTokens: data.usage?.input_tokens || 0, outputTokens: data.usage?.output_tokens || 0,
+        provider: out.provider, model: out.model, requestType: 'file-import',
+        inputTokens: out.inputTokens, outputTokens: out.outputTokens,
       },
     });
   } catch (e) {
-    return res.status(500).json({ ok: false, error: String(e.message || e) });
+    return res.status(502).json({ ok: false, error: String(e.message || e) });
   }
 };
 

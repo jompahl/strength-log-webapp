@@ -8,9 +8,7 @@
 // We verify the Google credential or signed app session so only signed-in users can spend your API budget.
 
 const { verifyRequestUser } = require('./_auth');
-
-const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-const MODEL = 'claude-sonnet-4-6';
+const { generate } = require('./_ai');
 
 const SYSTEM = `You are a fitness logging assistant AND a practical nutrition/training coach inside a tracker app.
 Your in-app name is provided in the user's context and always starts with "Coach". Speak in a direct, friendly coaching voice.
@@ -62,7 +60,6 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only' });
-  if (!ANTHROPIC_KEY) return res.status(500).json({ ok: false, error: 'Server missing ANTHROPIC_API_KEY.' });
 
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }
@@ -99,55 +96,30 @@ module.exports = async (req, res) => {
   const requestType = image ? 'image' : 'text';
 
   try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 1024,
-        system: SYSTEM,
-        messages: [{ role: 'user', content }],
-      }),
-    });
-    const data = await r.json();
-    if (data.error) return res.status(502).json({ ok: false, error: data.error.message || 'Claude API error' });
+    const out = await generate({ sub: user.sub, system: SYSTEM, content, maxTokens: 1024 });
+    const usage = {
+      provider: out.provider,
+      model: out.model,
+      requestType,
+      inputTokens: out.inputTokens,
+      outputTokens: out.outputTokens,
+    };
 
-    const textOut = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
     let parsed;
     try {
-      const clean = textOut.replace(/```json|```/g, '').trim();
+      const clean = out.text.replace(/```json|```/g, '').trim();
       parsed = JSON.parse(clean);
     } catch (e) {
       return res.status(200).json({
         ok: false,
         error: 'Could not understand that. Try rephrasing.',
-        raw: textOut,
-        usage: {
-          provider: 'anthropic',
-          model: MODEL,
-          requestType,
-          inputTokens: data.usage?.input_tokens || 0,
-          outputTokens: data.usage?.output_tokens || 0,
-        },
+        raw: out.text,
+        usage,
       });
     }
-    return res.status(200).json({
-      ok: true,
-      result: parsed,
-      usage: {
-        provider: 'anthropic',
-        model: MODEL,
-        requestType,
-        inputTokens: data.usage?.input_tokens || 0,
-        outputTokens: data.usage?.output_tokens || 0,
-      },
-    });
+    return res.status(200).json({ ok: true, result: parsed, usage });
   } catch (e) {
-    return res.status(500).json({ ok: false, error: String(e.message || e) });
+    return res.status(502).json({ ok: false, error: String(e.message || e) });
   }
 };
 

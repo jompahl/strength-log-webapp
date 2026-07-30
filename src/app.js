@@ -159,6 +159,39 @@ function renderAiUsageStatus(){
   ].join("");
 }
 
+// --- Bring-your-own AI key (OpenRouter) ---
+async function aiKeyCall(action, data={}){
+  const response=await fetch("/api/ai-key",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({idToken:ID_TOKEN, action, ...data})});
+  const result=await response.json().catch(()=>({ok:false,error:"Invalid response from the server."}));
+  if(!result.ok) throw new Error(result.error||"AI key request failed.");
+  return result;
+}
+function setAiKeyUi({hasKey=false, model="", message=""}={}){
+  const status=document.getElementById("aiKeyStatus");
+  const removeBtn=document.getElementById("aiKeyRemove");
+  const modelInput=document.getElementById("aiModelInput");
+  if(!status) return;
+  if(removeBtn) removeBtn.style.display=hasKey?"inline-flex":"none";
+  if(model && modelInput && !modelInput.value) modelInput.value=model;
+  if(message){ status.textContent=message; return; }
+  status.textContent=hasKey
+    ? `On · using your OpenRouter key with ${model||"your model"}`
+    : "Off · requests use the app's AI budget";
+}
+async function renderAiKeyStatus(){
+  const msg=document.getElementById("aiKeyMsg");
+  if(msg) msg.textContent="";
+  const input=document.getElementById("aiKeyInput");
+  if(input) input.value="";
+  if(!ID_TOKEN){ setAiKeyUi({message:"Sign in to use your own AI key."}); return; }
+  setAiKeyUi({message:"Checking…"});
+  try{
+    const result=await aiKeyCall("status");
+    setAiKeyUi({hasKey:result.hasKey, model:result.model});
+  }catch(e){ setAiKeyUi({message:e.message}); }
+}
+
 function setAvatar(el, coach){
   if(!el) return;
   el.textContent="";
@@ -1506,6 +1539,7 @@ document.getElementById("acctBtn").addEventListener("click",()=>{
   el.textContent=CURRENT_USER?("Signed in as "+(CURRENT_USER.email||CURRENT_USER.name)):"Not signed in";
   fillAccountProfileForm();
   renderAiUsageStatus();
+  renderAiKeyStatus();
   renderOuraStatus();
   renderWithingsStatus();
   syncModal.style.display="flex";
@@ -1514,6 +1548,30 @@ document.getElementById("acctProfileSave").addEventListener("click",saveAccountP
 document.getElementById("syncClose").addEventListener("click",()=>{ syncModal.style.display="none"; });
 syncModal.addEventListener("click",e=>{ if(e.target===syncModal) syncModal.style.display="none"; });
 document.getElementById("syncPush").addEventListener("click",pushNow);
+document.getElementById("aiKeySave").addEventListener("click",async()=>{
+  const btn=document.getElementById("aiKeySave");
+  const msg=document.getElementById("aiKeyMsg");
+  const key=document.getElementById("aiKeyInput").value.trim();
+  const model=document.getElementById("aiModelInput").value.trim();
+  if(!key){ msg.style.color="var(--muted)"; msg.textContent="Paste your OpenRouter key first."; return; }
+  btn.disabled=true; msg.style.color="var(--muted)"; msg.textContent="Verifying key…";
+  try{
+    const result=await aiKeyCall("save",{key,model});
+    document.getElementById("aiKeyInput").value="";
+    setAiKeyUi({hasKey:true, model:result.model});
+    msg.style.color="var(--green)"; msg.textContent="Saved. Your AI now runs on your OpenRouter key.";
+  }catch(e){ msg.style.color="var(--red)"; msg.textContent=e.message; }
+  finally{ btn.disabled=false; }
+});
+document.getElementById("aiKeyRemove").addEventListener("click",async()=>{
+  if(!confirm("Remove your OpenRouter key and go back to the app's AI?")) return;
+  const msg=document.getElementById("aiKeyMsg");
+  try{
+    const result=await aiKeyCall("delete");
+    setAiKeyUi({hasKey:false, model:result.model});
+    msg.style.color="var(--muted)"; msg.textContent="Removed. Requests use the app's AI again.";
+  }catch(e){ msg.style.color="var(--red)"; msg.textContent=e.message; }
+});
 document.getElementById("ouraSyncNow").addEventListener("click",()=>syncOuraData(true));
 document.getElementById("ouraToggle").addEventListener("change",async e=>{
   const toggle=e.currentTarget;

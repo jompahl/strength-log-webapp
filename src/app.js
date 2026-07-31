@@ -2,7 +2,7 @@ import { DB } from "./seedData.js";
 import { MUSCLE, STRENGTH_BURN } from "./domain.js";
 import { parseWorkoutCsv } from "./importWorkoutCsv.js";
 import { makeNonce, signInWithGoogleCredential, currentUser, signOut as supaSignOut } from "./auth.js";
-import { loadAll, saveAll } from "./data.js";
+import { loadAll, saveAll, insertEntry, insertEntries } from "./data.js";
 import coachTompahlUrl from "./assets/coaches/tompahl.jpg";
 import coachCalgaroUrl from "./assets/coaches/calgaro.jpg";
 import coachJompahlUrl from "./assets/coaches/jompahl.jpg";
@@ -271,15 +271,16 @@ async function pullNow(){
   setSyncStatus("Loading your data…","wait");
   try{
     const remote=await loadAll();
-    // MIGRATION SLICE: only profile + weigh-ins round-trip to Supabase yet. The other
-    // collections (entries/food/etc.) stay in the local cache until later slices, so we
-    // merge the migrated fields rather than overwriting STORE wholesale.
-    const hasRemote=(remote.weights&&remote.weights.length)||(remote.profile&&remote.profile.onboardingComplete);
+    // MIGRATION SLICE: profile, weigh-ins, and workouts/cardio (entries) round-trip to
+    // Supabase. The remaining collections (food/creatine/etc.) stay in the local cache
+    // until later slices, so we merge the migrated fields rather than overwriting wholesale.
+    const hasRemote=(remote.weights&&remote.weights.length)||(remote.entries&&remote.entries.length)||(remote.profile&&remote.profile.onboardingComplete);
     if(hasRemote){
       if(remote.profile&&Object.keys(remote.profile).length) STORE.profile=remote.profile;
       if(remote.coachId) STORE.coachId=remote.coachId;
       STORE.seedImported=remote.seedImported;
       STORE.weights=remote.weights;
+      STORE.entries=remote.entries;
       try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
       FIRST_PULL_DONE=true;
     } else {
@@ -297,6 +298,16 @@ async function pullNow(){
     if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
     if(!new URLSearchParams(location.search).has("oura")) maybeAutoSyncOura();
   }catch(e){ setSyncStatus("Load error: "+(e.message||e),"err"); }
+}
+// Persist a newly added workout/cardio entry to Supabase (entries are append-only).
+// STORE already holds it for immediate UI; this writes the durable rows.
+async function persistNewEntry(entry){
+  try{ setSyncStatus("Saving…","wait"); await insertEntry(entry); setSyncStatus("Saved ✓ "+new Date().toLocaleTimeString(),"ok"); }
+  catch(e){ setSyncStatus("Couldn't save to the cloud: "+(e.message||e),"err"); }
+}
+async function persistNewEntries(entries){
+  try{ await insertEntries(entries); }
+  catch(e){ setSyncStatus("Some items didn't save to the cloud: "+(e.message||e),"err"); }
 }
 function setSyncStatus(msg,kind){
   const el=document.getElementById("syncStatus"); if(el){
@@ -1192,7 +1203,8 @@ function saveStrength(){
       if(isNaN(reps)) return; let weight=wRaw===""?0:parseFloat(wRaw); if(isNaN(weight)) weight=0; sets.push({reps,weight}); });
     if(sets.length) exercises.push({name,muscle:muscleOf(name),sets}); });
   if(!exercises.length){ toast("Add at least one exercise"); return; }
-  STORE.entries.push({kind:"strength",date,type,exercises}); saveStore(STORE);
+  const strengthEntry={kind:"strength",date,type,exercises};
+  STORE.entries.push(strengthEntry); saveStore(STORE); persistNewEntry(strengthEntry);
   toast("Session saved ✓"); document.getElementById("addForm").classList.remove("open"); document.getElementById("toggleForm").textContent="+ Add session";
   buildStrip(); buildSelect(); CURRENT_EX=exercises[0].name; document.getElementById("exSelect").value=CURRENT_EX; rebuildDatalist(); renderStrength();
 }
@@ -1204,7 +1216,7 @@ function saveCardioEntry(){
   const e={kind:"cardio",date,activity:act};
   if(!isNaN(dist)) e.distance_km=dist; if(!isNaN(time)) e.duration_min=time;
   if(!isNaN(dist)&&!isNaN(time)&&dist>0) e.pace_min_km=time/dist; if(!isNaN(cal)) e.calories=cal;
-  STORE.entries.push(e); saveStore(STORE); toast("Cardio saved ✓");
+  STORE.entries.push(e); saveStore(STORE); persistNewEntry(e); toast("Cardio saved ✓");
   document.getElementById("cardioForm").classList.remove("open"); document.getElementById("toggleCardio").textContent="+ Add cardio";
   buildCardio();
 }
@@ -2022,8 +2034,9 @@ function showLogCard(r){
       <div style="color:var(--muted); line-height:1.6">${summary}</div>
       <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px"><button class="ghost" data-x="c">Skip</button><button class="primary" data-x="ok">Add session</button></div>`;
     box.querySelector('[data-x="ok"]').onclick=()=>{
-      STORE.entries.push({kind:"strength", date:today, type:r.type||"Other",
-        exercises:r.exercises.map(ex=>({name:ex.name, muscle:(MUSCLE[ex.name]||"Other"), sets:ex.sets}))});
+      const coachStrength={kind:"strength", date:today, type:r.type||"Other",
+        exercises:r.exercises.map(ex=>({name:ex.name, muscle:(MUSCLE[ex.name]||"Other"), sets:ex.sets}))};
+      STORE.entries.push(coachStrength); persistNewEntry(coachStrength);
       done((r.type||"Strength")+" session added");
     };
   } else if(r.kind==="cardio"){
@@ -2036,7 +2049,7 @@ function showLogCard(r){
       const e={kind:"cardio", date:today, activity:r.activity||"Run"};
       if(r.distance_km) e.distance_km=r.distance_km; if(r.duration_min) e.duration_min=r.duration_min;
       if(pc) e.pace_min_km=pc; if(r.calories) e.calories=r.calories;
-      STORE.entries.push(e); done((r.activity||"Cardio")+" added");
+      STORE.entries.push(e); persistNewEntry(e); done((r.activity||"Cardio")+" added");
     };
   } else { box.innerHTML=`<span style="color:var(--muted)">Nothing to log there.</span>`; }
 
@@ -2087,6 +2100,7 @@ document.getElementById("workoutCsvConfirm").addEventListener("click",async ()=>
   if(duplicates) details.push(`${duplicates} already present`);
   if(result.skippedRows) details.push(`${result.skippedRows} unsupported row${result.skippedRows===1?'':'s'} skipped`);
   setSyncStatus(details.join(" · ")+". Saving to your account…","wait");
+  await persistNewEntries(additions);
   await pushNow();
   setSyncStatus(details.join(" · ")+" ✓","ok");
 });
@@ -2129,6 +2143,7 @@ document.getElementById("workoutAiConfirm").addEventListener("click",async ()=>{
   if(duplicates) details.push(`${duplicates} already present`);
   if(result.warnings&&result.warnings.length) details.push(result.warnings[0]);
   setSyncStatus(details.join(" · ")+". Saving…","wait");
+  await persistNewEntries(additions);
   await pushNow();
   setSyncStatus(details.join(" · ")+" ✓","ok");
 });

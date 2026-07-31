@@ -53,3 +53,9 @@ export function onAuthChange(handler) {
 export async function signOut() {
   await supabase.auth.signOut();
 }
+
+// The current Supabase access token (JWT), for authorizing calls to our serverless functions.
+export async function accessToken() {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token || '';
+}

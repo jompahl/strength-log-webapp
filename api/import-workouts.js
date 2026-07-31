@@ -1,5 +1,5 @@
 // AI-assisted converter for text-based workout exports with unknown schemas.
-const { verifyRequestUser } = require('./_auth');
+const { verifyUser, getIntegration } = require('./_supabase');
 const { generate } = require('./_ai');
 
 const MAX_FILE_CHARS = 250000;
@@ -75,7 +75,7 @@ module.exports = async (req, res) => {
 
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }
-  const user = await verifyRequestUser(req, body?.idToken);
+  const user = await verifyUser(req);
   if (!user) return res.status(401).json({ ok: false, error: 'Please sign in again.' });
   const fileText = String(body?.fileText || '');
   if (!fileText.trim()) return res.status(400).json({ ok: false, error: 'The selected file is empty.' });
@@ -83,7 +83,8 @@ module.exports = async (req, res) => {
 
   try {
     const content = [{ type: 'text', text: `File name: ${plainText(body?.fileName || 'workout export', 200)}\n\n<workout_export>\n${fileText}\n</workout_export>` }];
-    const out = await generate({ sub: user.sub, system: SYSTEM, content, maxTokens: 24000 });
+    const key = await getIntegration(user.client, 'openrouter');
+    const out = await generate({ system: SYSTEM, content, maxTokens: 24000, userKey: key?.secret, userModel: key?.meta?.model });
     if (out.stopReason === 'max_tokens' || out.stopReason === 'length') return res.status(422).json({ ok: false, error: 'The converted data was too large. Try a smaller export or split it by date.' });
     const output = out.text.replace(/```json|```/g, '').trim();
     let parsed;

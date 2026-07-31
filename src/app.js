@@ -1,7 +1,7 @@
 import { DB } from "./seedData.js";
 import { MUSCLE, STRENGTH_BURN } from "./domain.js";
 import { parseWorkoutCsv } from "./importWorkoutCsv.js";
-import { makeNonce, signInWithGoogleCredential, currentUser, signOut as supaSignOut } from "./auth.js";
+import { makeNonce, signInWithGoogleCredential, currentUser, signOut as supaSignOut, accessToken } from "./auth.js";
 import { loadAll, saveAll, insertEntry, insertEntries, upsertCreatine, deleteCreatine,
   insertFood, deleteFood, insertFavorite, deleteFavorite } from "./data.js";
 import coachTompahlUrl from "./assets/coaches/tompahl.jpg";
@@ -165,8 +165,8 @@ function renderAiUsageStatus(){
 
 // --- Bring-your-own AI key (OpenRouter) ---
 async function aiKeyCall(action, data={}){
-  const response=await fetch("/api/ai-key",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({idToken:ID_TOKEN, action, ...data})});
+  const response=await fetch("/api/ai-key",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(await accessToken())},
+    body:JSON.stringify({action, ...data})});
   const result=await response.json().catch(()=>({ok:false,error:"Invalid response from the server."}));
   if(!result.ok) throw new Error(result.error||"AI key request failed.");
   return result;
@@ -1910,8 +1910,8 @@ async function chatSend(){
   document.getElementById("chatPhotoClear").click();
   addTyping();
   try{
-    const res=await fetch("/api/parse",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({idToken:ID_TOKEN, text, image:sentImage, mediaType:sentMedia, context:dayContext(), history:historyContext(), conversation:CHAT_CONTEXT.slice(-10), onboarding:ONBOARDING_ACTIVE, coachName:selectedCoach().label, localDate:localDateString()})});
+    const res=await fetch("/api/parse",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(await accessToken())},
+      body:JSON.stringify({text, image:sentImage, mediaType:sentMedia, context:dayContext(), history:historyContext(), conversation:CHAT_CONTEXT.slice(-10), onboarding:ONBOARDING_ACTIVE, coachName:selectedCoach().label, localDate:localDateString()})});
     const j=await res.json();
     removeTyping();
     if(j.usage) recordAiUsage(j.usage);
@@ -2151,8 +2151,8 @@ document.getElementById("workoutAiConfirm").addEventListener("click",async ()=>{
   setSyncStatus("AI is reading and converting the workout file…","wait");
   let response;
   try{
-    response=await fetch("/api/import-workouts",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({idToken:ID_TOKEN,fileName:file.name,fileText:await file.text()})});
+    response=await fetch("/api/import-workouts",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(await accessToken())},
+      body:JSON.stringify({fileName:file.name,fileText:await file.text()})});
   }catch(e){ setSyncStatus("Could not reach the AI importer.","err"); return; }
   const result=await response.json().catch(()=>({ok:false,error:"Invalid response from the AI importer."}));
   if(result.usage) recordAiUsage(result.usage);

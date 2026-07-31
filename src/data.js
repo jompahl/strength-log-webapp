@@ -12,7 +12,7 @@ import { supabase } from './supabaseClient.js';
 
 // Pull the signed-in user's data into a STORE-shaped payload (consumed by applyPayload).
 export async function loadAll() {
-  const [profileRes, weightsRes, workoutsRes, cardioRes, creatineRes] = await Promise.all([
+  const [profileRes, weightsRes, workoutsRes, cardioRes, creatineRes, foodsRes, favoritesRes] = await Promise.all([
     supabase.from('profiles').select('data, coach_id, seed_imported').maybeSingle(),
     supabase.from('weights').select('date, kg, source').order('date', { ascending: true }),
     supabase.from('workouts')
@@ -22,8 +22,10 @@ export async function loadAll() {
       .select('id, date, activity, distance_km, duration_min, pace_min_km, calories, note, import_id')
       .order('date', { ascending: true }),
     supabase.from('creatine').select('date, grams').order('date', { ascending: true }),
+    supabase.from('foods').select('client_id, date, name, kcal, protein_g, carbs_g, fat_g').order('date', { ascending: true }),
+    supabase.from('food_favorites').select('client_id, name, kcal, protein_g, carbs_g, fat_g'),
   ]);
-  for (const r of [profileRes, weightsRes, workoutsRes, cardioRes, creatineRes]) if (r.error) throw r.error;
+  for (const r of [profileRes, weightsRes, workoutsRes, cardioRes, creatineRes, foodsRes, favoritesRes]) if (r.error) throw r.error;
 
   const profileRow = profileRes.data;
   const strengthEntries = (workoutsRes.data || []).map(fromWorkoutRow);
@@ -37,10 +39,49 @@ export async function loadAll() {
     weights: (weightsRes.data || []).map(w => ({ date: w.date, kg: Number(w.kg), source: w.source || 'manual' })),
     entries,
     creatine: (creatineRes.data || []).map(c => ({ date: c.date, grams: Number(c.grams) })),
+    food: (foodsRes.data || []).map(f => ({
+      _id: f.client_id, date: f.date, name: f.name,
+      kcal: f.kcal, p: f.protein_g, c: f.carbs_g, fat: f.fat_g,
+    })),
+    foodFavorites: (favoritesRes.data || []).map(f => ({
+      _id: f.client_id, name: f.name,
+      kcal: f.kcal, p: f.protein_g, c: f.carbs_g, fat: f.fat_g,
+    })),
     // not yet migrated — kept empty so rendering works without the old blob:
-    food: [], foodFavorites: [], aiUsage: [],
-    ouraDaily: [], strengthCycle: null, withingsLastSync: null, withingsBaseWeight: null,
+    aiUsage: [], ouraDaily: [], strengthCycle: null, withingsLastSync: null, withingsBaseWeight: null,
   };
+}
+
+// ---- Food log + favorites (keyed by the app's client _id) ----
+export async function insertFood(food) {
+  const userId = await currentUserId();
+  if (!userId) throw new Error('Not signed in.');
+  const { error } = await supabase.from('foods').insert({
+    user_id: userId, client_id: food._id, date: food.date, name: food.name,
+    kcal: food.kcal ?? null, protein_g: food.p ?? null, carbs_g: food.c ?? null, fat_g: food.fat ?? null,
+  });
+  if (error) throw error;
+}
+export async function deleteFood(clientId) {
+  const userId = await currentUserId();
+  if (!userId) return;
+  const { error } = await supabase.from('foods').delete().eq('user_id', userId).eq('client_id', clientId);
+  if (error) throw error;
+}
+export async function insertFavorite(fav) {
+  const userId = await currentUserId();
+  if (!userId) throw new Error('Not signed in.');
+  const { error } = await supabase.from('food_favorites').insert({
+    user_id: userId, client_id: fav._id, name: fav.name,
+    kcal: fav.kcal ?? null, protein_g: fav.p ?? null, carbs_g: fav.c ?? null, fat_g: fav.fat ?? null,
+  });
+  if (error) throw error;
+}
+export async function deleteFavorite(clientId) {
+  const userId = await currentUserId();
+  if (!userId) return;
+  const { error } = await supabase.from('food_favorites').delete().eq('user_id', userId).eq('client_id', clientId);
+  if (error) throw error;
 }
 
 // ---- Creatine (one row per day, keyed by date) ----

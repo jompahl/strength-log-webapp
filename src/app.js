@@ -2,7 +2,8 @@ import { DB } from "./seedData.js";
 import { MUSCLE, STRENGTH_BURN } from "./domain.js";
 import { parseWorkoutCsv } from "./importWorkoutCsv.js";
 import { makeNonce, signInWithGoogleCredential, currentUser, signOut as supaSignOut } from "./auth.js";
-import { loadAll, saveAll, insertEntry, insertEntries, upsertCreatine, deleteCreatine } from "./data.js";
+import { loadAll, saveAll, insertEntry, insertEntries, upsertCreatine, deleteCreatine,
+  insertFood, deleteFood, insertFavorite, deleteFavorite } from "./data.js";
 import coachTompahlUrl from "./assets/coaches/tompahl.jpg";
 import coachCalgaroUrl from "./assets/coaches/calgaro.jpg";
 import coachJompahlUrl from "./assets/coaches/jompahl.jpg";
@@ -282,6 +283,8 @@ async function pullNow(){
       STORE.weights=remote.weights;
       STORE.entries=remote.entries;
       STORE.creatine=remote.creatine;
+      STORE.food=remote.food;
+      STORE.foodFavorites=remote.foodFavorites;
       try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
       FIRST_PULL_DONE=true;
     } else {
@@ -783,6 +786,22 @@ async function persistCreatine(date, grams){
   try{ if(grams>0) await upsertCreatine(date,grams); else await deleteCreatine(date); }
   catch(e){ setSyncStatus("Couldn't save creatine to the cloud: "+(e.message||e),"err"); }
 }
+async function persistFoodAdd(food){
+  if(!ID_TOKEN || !FIRST_PULL_DONE) return;
+  try{ await insertFood(food); }catch(e){ setSyncStatus("Couldn't save food to the cloud: "+(e.message||e),"err"); }
+}
+async function persistFoodDelete(id){
+  if(!ID_TOKEN || !FIRST_PULL_DONE) return;
+  try{ await deleteFood(id); }catch(e){ setSyncStatus("Couldn't remove food in the cloud: "+(e.message||e),"err"); }
+}
+async function persistFavoriteAdd(fav){
+  if(!ID_TOKEN || !FIRST_PULL_DONE) return;
+  try{ await insertFavorite(fav); }catch(e){ setSyncStatus("Couldn't save favorite: "+(e.message||e),"err"); }
+}
+async function persistFavoriteDelete(id){
+  if(!ID_TOKEN || !FIRST_PULL_DONE) return;
+  try{ await deleteFavorite(id); }catch(e){ setSyncStatus("Couldn't remove favorite: "+(e.message||e),"err"); }
+}
 function ouraForDay(day){ return (STORE.ouraDaily||[]).find(row=>row.date===day&&row.totalCalories>0)||null; }
 function dayTotals(day,{includeOura=true}={}){
   const p=profile(); const maint=Math.round(p.bmr*parseFloat(p.activityMult||1.2));
@@ -1106,7 +1125,7 @@ function removeFood(id){
   STORE.food=(STORE.food||[]).filter(f=>f._id!==id);
   if((STORE.food||[]).length===before){
     STORE.hiddenFood=STORE.hiddenFood||[]; if(!STORE.hiddenFood.includes(id)) STORE.hiddenFood.push(id);
-  }
+  } else { persistFoodDelete(id); }
   saveStore(STORE); renderCalories(); toast("Removed");
 }
 
@@ -1144,12 +1163,14 @@ function addFoodFavorite(id){
   if(findFavoriteForFood(favorite)){ toast("Already in favorites"); return; }
   STORE.foodFavorites=STORE.foodFavorites||[];
   STORE.foodFavorites.push(favorite);
+  persistFavoriteAdd(favorite);
   saveStore(STORE);
   renderCalories();
   toast("Added to favorites ★");
 }
 function removeFoodFavorite(id){
   STORE.foodFavorites=(STORE.foodFavorites||[]).filter(f=>String(f._id)!==String(id));
+  persistFavoriteDelete(id);
   saveStore(STORE);
   renderCalories();
   toast("Favorite removed");
@@ -1158,7 +1179,7 @@ function logFoodFavorite(id){
   const fav=(STORE.foodFavorites||[]).find(f=>String(f._id)===String(id));
   if(!fav){ toast("Favorite not found"); return; }
   STORE.food=STORE.food||[];
-  STORE.food.push({
+  const loggedFav={
     _id:"f"+Date.now()+Math.random().toString(36).slice(2,6),
     date:CAL_DAY,
     name:fav.name,
@@ -1167,7 +1188,9 @@ function logFoodFavorite(id){
     c:Number(fav.c||0),
     fat:Number(fav.fat||0),
     favoriteId:fav._id,
-  });
+  };
+  STORE.food.push(loggedFav);
+  persistFoodAdd(loggedFav);
   saveStore(STORE);
   renderCalories();
   toast(`Logged ${fav.name} ✓`);
@@ -1178,6 +1201,7 @@ function addFoodFavoriteFromEntry(food){
   if(findFavoriteForFood(favorite)) return false;
   STORE.foodFavorites=STORE.foodFavorites||[];
   STORE.foodFavorites.push(favorite);
+  persistFavoriteAdd(favorite);
   return true;
 }
 
@@ -1233,7 +1257,7 @@ function saveFoodEntry(){
   if(!name||isNaN(kcal)){ toast("Need a name and calories"); return; }
   const f={_id:"f"+Date.now()+Math.random().toString(36).slice(2,6),date:CAL_DAY,name,kcal,
     p:parseFloat(document.getElementById("foodP").value)||0,c:parseFloat(document.getElementById("foodC").value)||0,fat:parseFloat(document.getElementById("foodF").value)||0};
-  STORE.food=STORE.food||[]; STORE.food.push(f); saveStore(STORE);
+  STORE.food=STORE.food||[]; STORE.food.push(f); persistFoodAdd(f); saveStore(STORE);
   ["foodName","foodKcal","foodP","foodC","foodF"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("foodForm").classList.remove("open"); document.getElementById("toggleFood").textContent="+ Add food";
   toast("Food added ✓"); renderCalories();
@@ -2012,7 +2036,7 @@ function showLogCard(r){
         p:parseFloat(box.querySelector(`[data-f="p"][data-i="${i}"]`).value)||0, c:it.c||0, fat:it.fat||0}));
       STORE.food=STORE.food||[];
       const loggedItems=items.map(it=>({_id:"f"+Date.now()+Math.random().toString(36).slice(2,6), date:logDate, ...it}));
-      loggedItems.forEach(it=> STORE.food.push(it));
+      loggedItems.forEach(it=>{ STORE.food.push(it); persistFoodAdd(it); });
       CAL_DAY=logDate;
       done("Added "+items.length+" item"+(items.length>1?"s":"")+" for "+fmtDate(logDate));
       showFoodFavoritePrompt(loggedItems);

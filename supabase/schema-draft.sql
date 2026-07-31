@@ -23,24 +23,16 @@
 -- ---------------------------------------------------------------------------
 -- profiles — one row per user (PK = user_id). Body stats + app settings.
 -- ---------------------------------------------------------------------------
+-- The app treats the profile as one holistic object (with derived caches like bmr,
+-- maintenance, activityMult, onboardingComplete), so it is stored as JSONB rather than a
+-- lossy typed mapping. The two top-level app flags stay as columns.
 create table public.profiles (
-  user_id           uuid primary key references auth.users(id) on delete cascade,
-  weight_kg         numeric,
-  height_cm         integer,
-  age               integer,
-  sex               text check (sex in ('male','female','other')),
-  activity          text check (activity in ('sedentary','light','moderate','very')),
-  target_weight_kg  numeric,
-  -- coaching / app preferences that used to live in the blob
-  protein_per_kg    numeric default 2.0,
-  deficit_target    integer default 400,
-  coach_id          text,
-  seed_imported     boolean not null default false,
-  created_at        timestamptz not null default now(),
-  updated_at        timestamptz not null default now()
+  user_id       uuid primary key references auth.users(id) on delete cascade,
+  data          jsonb not null default '{}'::jsonb,   -- the app's profile object, verbatim
+  coach_id      text,
+  seed_imported boolean not null default false,
+  updated_at    timestamptz not null default now()
 );
--- Note: bmr / maintenance were stored but are derivable from the fields above.
--- Recompute in the app or a view rather than persisting stale copies.
 
 -- ---------------------------------------------------------------------------
 -- Strength: workouts -> exercises -> sets (3 levels, matches the JSON exactly)

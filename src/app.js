@@ -1,6 +1,8 @@
 import { DB } from "./seedData.js";
 import { MUSCLE, STRENGTH_BURN } from "./domain.js";
 import { parseWorkoutCsv } from "./importWorkoutCsv.js";
+import { makeNonce, signInWithGoogleCredential, currentUser, signOut as supaSignOut } from "./auth.js";
+import { loadAll, saveAll } from "./data.js";
 import coachTompahlUrl from "./assets/coaches/tompahl.jpg";
 import coachCalgaroUrl from "./assets/coaches/calgaro.jpg";
 import coachJompahlUrl from "./assets/coaches/jompahl.jpg";
@@ -44,6 +46,7 @@ const SESSION_URL = "/api/session";
 let ID_TOKEN = null;        // Google ID token during sign-in, then "session" for the HttpOnly app session
 let CURRENT_USER = null;    // {email, name}
 let GOOGLE_INITIALIZED=false;
+let SIGNIN_NONCE=null;      // raw nonce for the current one-tap init (hashed copy given to Google)
 let pushTimer=null;
 let FIRST_PULL_DONE=false;  // becomes true after the initial load; gates pushes
 
@@ -254,51 +257,46 @@ function schedulePush(){
   clearTimeout(pushTimer);
   pushTimer=setTimeout(pushNow, 1500);
 }
-async function apiCall(action, data){
-  const res=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({idToken:ID_TOKEN, action, data})});
-  return res.json();
-}
 async function pushNow(){
   if(!ID_TOKEN) return;
+  if(!FIRST_PULL_DONE) return;
   setSyncStatus("Saving…","wait");
   try{
-    const j=await apiCall("save", syncPayload());
-    if(j.ok){ const t=new Date().toLocaleTimeString(); setSyncStatus("Saved ✓ "+t,"ok"); }
-    else if(/sign-in/i.test(j.error||"")){ setSyncStatus("Session expired — sign in again.","err"); requireSignIn(); }
-    else setSyncStatus("Save error: "+(j.error||"unknown"),"err");
-  }catch(e){ setSyncStatus("Couldn't reach the server. Check your connection.","err"); }
+    await saveAll(STORE);
+    const t=new Date().toLocaleTimeString(); setSyncStatus("Saved ✓ "+t,"ok");
+  }catch(e){ setSyncStatus("Save error: "+(e.message||e),"err"); }
 }
 async function pullNow(){
   if(!ID_TOKEN) return;
   setSyncStatus("Loading your data…","wait");
   try{
-    const j=await apiCall("load", null);
-    if(j.ok){
-      const remote=j.data;
-      const hasRemote=remote&&((remote.entries&&remote.entries.length)||(remote.food&&remote.food.length)||
-        (remote.foodFavorites&&remote.foodFavorites.length)||
-        (remote.weights&&remote.weights.length)||(remote.aiUsage&&remote.aiUsage.length)||
-        (remote.ouraDaily&&remote.ouraDaily.length)||(remote.profile&&remote.profile.onboardingComplete));
-      if(hasRemote){ applyPayload(remote); FIRST_PULL_DONE=true; }
-      else {
-        // brand-new account: start blank (no demo history). Mark as initialized so
-        // the built-in DB demo data is never merged in, then save the empty state.
-        STORE.entries=STORE.entries||[]; STORE.food=STORE.food||[]; STORE.foodFavorites=STORE.foodFavorites||[]; STORE.weights=STORE.weights||[]; STORE.aiUsage=STORE.aiUsage||[];
-        STORE.seedImported=true;
-        if(STORE.profile) STORE.profile.onboardingComplete=false;
-        try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
-        FIRST_PULL_DONE=true;   // safe to push now: we've confirmed the account is empty
-        startOnboardingChat();
-      }
-      const t=new Date().toLocaleTimeString(); setSyncStatus("Synced ✓ "+t,"ok");
-      buildStrip(); buildSelect(); renderStrength(); rebuildDatalist();
-      if(document.getElementById("view-cardio").classList.contains("on")) buildCardio();
-      if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
-      if(!new URLSearchParams(location.search).has("oura")) maybeAutoSyncOura();
-    } else if(/sign-in/i.test(j.error||"")){ requireSignIn(); }
-    else setSyncStatus("Load error: "+(j.error||"unknown"),"err");
-  }catch(e){ setSyncStatus("Couldn't reach the server.","err"); }
+    const remote=await loadAll();
+    // MIGRATION SLICE: only profile + weigh-ins round-trip to Supabase yet. The other
+    // collections (entries/food/etc.) stay in the local cache until later slices, so we
+    // merge the migrated fields rather than overwriting STORE wholesale.
+    const hasRemote=(remote.weights&&remote.weights.length)||(remote.profile&&remote.profile.onboardingComplete);
+    if(hasRemote){
+      if(remote.profile&&Object.keys(remote.profile).length) STORE.profile=remote.profile;
+      if(remote.coachId) STORE.coachId=remote.coachId;
+      STORE.seedImported=remote.seedImported;
+      STORE.weights=remote.weights;
+      try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
+      FIRST_PULL_DONE=true;
+    } else {
+      // brand-new account: start blank, run onboarding.
+      STORE.weights=STORE.weights||[]; STORE.aiUsage=STORE.aiUsage||[];
+      STORE.seedImported=true;
+      if(STORE.profile) STORE.profile.onboardingComplete=false;
+      try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
+      FIRST_PULL_DONE=true;
+      startOnboardingChat();
+    }
+    const t=new Date().toLocaleTimeString(); setSyncStatus("Synced ✓ "+t,"ok");
+    buildStrip(); buildSelect(); renderStrength(); rebuildDatalist();
+    if(document.getElementById("view-cardio").classList.contains("on")) buildCardio();
+    if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
+    if(!new URLSearchParams(location.search).has("oura")) maybeAutoSyncOura();
+  }catch(e){ setSyncStatus("Load error: "+(e.message||e),"err"); }
 }
 function setSyncStatus(msg,kind){
   const el=document.getElementById("syncStatus"); if(el){
@@ -325,43 +323,22 @@ function useSignedInUser(newUser, authToken="session"){
   showApp();
   pullNow().finally(handleIntegrationReturns);
 }
-async function createAppSession(idToken){
-  const response=await fetch(SESSION_URL,{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({idToken})});
-  const result=await response.json().catch(()=>({ok:false}));
-  if(!response.ok||!result.ok||!result.user) throw new Error(result.error||"Could not create app session.");
-  return result.user;
-}
 async function restoreAppSession(){
   try{
-    const response=await fetch(SESSION_URL,{method:"GET"});
-    if(!response.ok) return false;
-    const result=await response.json();
-    if(!result.ok||!result.authenticated||!result.user) return false;
-    useSignedInUser(result.user);
+    const user=await currentUser();     // reads the persisted Supabase session (no network)
+    if(!user) return false;
+    useSignedInUser(user);
     return true;
   }catch(e){ return false; }
 }
-async function renewAppSession(){
-  if(ID_TOKEN!=="session") return;
-  try{
-    const response=await fetch(SESSION_URL,{method:"GET"});
-    if(response.status===401) requireSignIn();
-  }catch(e){}
-}
+async function renewAppSession(){ /* Supabase auto-refreshes the session; nothing to do */ }
 async function handleCredential(resp){
-  let newUser={email:"",name:"Account"};
   try{
-    const payload=JSON.parse(atob(resp.credential.split(".")[1]));
-    newUser={email:payload.email, name:payload.name||payload.email, sub:payload.sub};
-  }catch(e){}
-  try{
-    newUser=await createAppSession(resp.credential);
-    useSignedInUser(newUser);
+    const user=await signInWithGoogleCredential(resp.credential, SIGNIN_NONCE);
+    if(!user) throw new Error("Sign-in did not return a session.");
+    useSignedInUser(user);
   }catch(e){
-    // Keep the current tab usable if session creation is temporarily unavailable.
-    useSignedInUser(newUser,resp.credential);
-    setSyncStatus("Signed in for this visit, but the 7-day session could not be saved.","err");
+    setSyncStatus("Google sign-in failed: "+(e.message||e),"err");
   }
 }
 function showApp(){
@@ -396,7 +373,7 @@ function showLocalDevSignIn(message){
     toast("Local-only mode: sync and AI calls need Vercel/API config.");
   });
 }
-function initGoogle(){
+async function initGoogle(){
   if(GOOGLE_INITIALIZED) return;
   if(!window.google||!google.accounts){ setTimeout(initGoogle,300); return; }
   if(!CLIENT_ID_RESOLVED){
@@ -408,7 +385,10 @@ function initGoogle(){
     }).catch(()=>{ showLocalDevSignIn("Couldn't reach /api/config. Continue locally, or run the Vercel API runtime."); });
     return;
   }
-  google.accounts.id.initialize({client_id:CLIENT_ID_RESOLVED, callback:handleCredential, auto_select:true});
+  // One-tap + Supabase nonce: Google gets the hashed value, Supabase gets the raw one.
+  const {raw,hashed}=await makeNonce();
+  SIGNIN_NONCE=raw;
+  google.accounts.id.initialize({client_id:CLIENT_ID_RESOLVED, callback:handleCredential, auto_select:true, nonce:hashed});
   GOOGLE_INITIALIZED=true;
   google.accounts.id.renderButton(document.getElementById("gsiButton"),
     {theme:"filled_black", size:"large", text:"continue_with", shape:"pill", width:280});
@@ -2176,7 +2156,7 @@ document.getElementById("importConfirm").addEventListener("click",async ()=>{
 document.getElementById("signOutBtn").addEventListener("click",async ()=>{
   syncModal.style.display="none";
   try{ google.accounts.id.disableAutoSelect(); }catch(e){}
-  try{ await fetch(SESSION_URL,{method:"DELETE"}); }catch(e){}
+  try{ await supaSignOut(); }catch(e){}
   requireSignIn();
 });
 document.addEventListener("visibilitychange",()=>{
@@ -2192,17 +2172,7 @@ renderStrength();
 // Restore the signed, HttpOnly seven-day session. Migrate an existing valid
 // sessionStorage Google token once so current users do not have to sign in again.
 (async function initAuth(){
-  if(await restoreAppSession()) return;
-  const saved=sessionStorage.getItem("idtoken");
-  sessionStorage.removeItem("idtoken");
-  if(saved){
-    try{
-      const payload=JSON.parse(atob(saved.split(".")[1]));
-      if(payload.exp&&payload.exp*1000>Date.now()){
-        await handleCredential({credential:saved});
-        return;
-      }
-    }catch(e){}
-  }
+  sessionStorage.removeItem("idtoken");   // clear any stale token from the old session scheme
+  if(await restoreAppSession()) return;   // resume a persisted Supabase session if present
   initGoogle();
 })();

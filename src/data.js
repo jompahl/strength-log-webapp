@@ -12,7 +12,7 @@ import { supabase } from './supabaseClient.js';
 
 // Pull the signed-in user's data into a STORE-shaped payload (consumed by applyPayload).
 export async function loadAll() {
-  const [profileRes, weightsRes, workoutsRes, cardioRes] = await Promise.all([
+  const [profileRes, weightsRes, workoutsRes, cardioRes, creatineRes] = await Promise.all([
     supabase.from('profiles').select('data, coach_id, seed_imported').maybeSingle(),
     supabase.from('weights').select('date, kg, source').order('date', { ascending: true }),
     supabase.from('workouts')
@@ -21,8 +21,9 @@ export async function loadAll() {
     supabase.from('cardio_sessions')
       .select('id, date, activity, distance_km, duration_min, pace_min_km, calories, note, import_id')
       .order('date', { ascending: true }),
+    supabase.from('creatine').select('date, grams').order('date', { ascending: true }),
   ]);
-  for (const r of [profileRes, weightsRes, workoutsRes, cardioRes]) if (r.error) throw r.error;
+  for (const r of [profileRes, weightsRes, workoutsRes, cardioRes, creatineRes]) if (r.error) throw r.error;
 
   const profileRow = profileRes.data;
   const strengthEntries = (workoutsRes.data || []).map(fromWorkoutRow);
@@ -35,10 +36,26 @@ export async function loadAll() {
     seedImported: profileRow?.seed_imported ?? false,
     weights: (weightsRes.data || []).map(w => ({ date: w.date, kg: Number(w.kg), source: w.source || 'manual' })),
     entries,
+    creatine: (creatineRes.data || []).map(c => ({ date: c.date, grams: Number(c.grams) })),
     // not yet migrated — kept empty so rendering works without the old blob:
-    food: [], foodFavorites: [], creatine: [], aiUsage: [],
+    food: [], foodFavorites: [], aiUsage: [],
     ouraDaily: [], strengthCycle: null, withingsLastSync: null, withingsBaseWeight: null,
   };
+}
+
+// ---- Creatine (one row per day, keyed by date) ----
+export async function upsertCreatine(date, grams) {
+  const userId = await currentUserId();
+  if (!userId) throw new Error('Not signed in.');
+  const { error } = await supabase.from('creatine')
+    .upsert({ user_id: userId, date, grams }, { onConflict: 'user_id,date' });
+  if (error) throw error;
+}
+export async function deleteCreatine(date) {
+  const userId = await currentUserId();
+  if (!userId) return;
+  const { error } = await supabase.from('creatine').delete().eq('user_id', userId).eq('date', date);
+  if (error) throw error;
 }
 
 function fromWorkoutRow(w) {

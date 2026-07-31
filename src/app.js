@@ -2,7 +2,7 @@ import { DB } from "./seedData.js";
 import { MUSCLE, STRENGTH_BURN } from "./domain.js";
 import { parseWorkoutCsv } from "./importWorkoutCsv.js";
 import { makeNonce, signInWithGoogleCredential, currentUser, signOut as supaSignOut } from "./auth.js";
-import { loadAll, saveAll, insertEntry, insertEntries } from "./data.js";
+import { loadAll, saveAll, insertEntry, insertEntries, upsertCreatine, deleteCreatine } from "./data.js";
 import coachTompahlUrl from "./assets/coaches/tompahl.jpg";
 import coachCalgaroUrl from "./assets/coaches/calgaro.jpg";
 import coachJompahlUrl from "./assets/coaches/jompahl.jpg";
@@ -281,6 +281,7 @@ async function pullNow(){
       STORE.seedImported=remote.seedImported;
       STORE.weights=remote.weights;
       STORE.entries=remote.entries;
+      STORE.creatine=remote.creatine;
       try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
       FIRST_PULL_DONE=true;
     } else {
@@ -775,6 +776,12 @@ function creatineTarget(profileData=profile()){
 function setCreatineForDay(day,grams){
   STORE.creatine=(STORE.creatine||[]).filter(entry=>entry.date!==day);
   if(grams>0) STORE.creatine.push({date:day,grams});
+  persistCreatine(day, grams>0?grams:0);
+}
+async function persistCreatine(date, grams){
+  if(!ID_TOKEN || !FIRST_PULL_DONE) return;   // only after a signed-in load
+  try{ if(grams>0) await upsertCreatine(date,grams); else await deleteCreatine(date); }
+  catch(e){ setSyncStatus("Couldn't save creatine to the cloud: "+(e.message||e),"err"); }
 }
 function ouraForDay(day){ return (STORE.ouraDaily||[]).find(row=>row.date===day&&row.totalCalories>0)||null; }
 function dayTotals(day,{includeOura=true}={}){

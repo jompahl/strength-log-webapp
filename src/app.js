@@ -4,7 +4,7 @@ import { parseWorkoutCsv } from "./importWorkoutCsv.js";
 import { makeNonce, signInWithGoogleCredential, currentUser, signOut as supaSignOut, accessToken } from "./auth.js";
 import { loadAll, saveAll, insertEntry, insertEntries, upsertCreatine, deleteCreatine,
   insertFood, deleteFood, insertFavorite, deleteFavorite, saveStrengthCycle as persistStrengthCyclePlan,
-  recordAiUsageRow } from "./data.js";
+  recordAiUsageRow, backfillToSupabase } from "./data.js";
 import coachTompahlUrl from "./assets/coaches/tompahl.jpg";
 import coachCalgaroUrl from "./assets/coaches/calgaro.jpg";
 import coachJompahlUrl from "./assets/coaches/jompahl.jpg";
@@ -2205,13 +2205,16 @@ document.getElementById("importConfirm").addEventListener("click",async ()=>{
   try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
   document.getElementById("importBox").style.display="none";
   document.getElementById("importText").value="";
-  setSyncStatus("Imported — saving to your account…","wait");
-  await pushNow();
+  setSyncStatus("Imported — writing to Supabase (this can take a moment)…","wait");
+  try{
+    await pushNow();                          // profile + weights
+    const s=await backfillToSupabase(parsed); // entries, food, favorites, creatine, cycle
+    setSyncStatus(`Backfilled ✓ ${s.entries} workouts/cardio · ${s.food} foods · ${s.creatine} creatine days`,"ok");
+  }catch(e){ setSyncStatus("Backfill error: "+(e.message||e),"err"); }
   // refresh all views
   buildStrip(); buildSelect(); renderStrength(); rebuildDatalist();
   if(document.getElementById("view-cardio").classList.contains("on")) buildCardio();
   if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
-  setSyncStatus("Imported and saved ✓","ok");
 });
 document.getElementById("signOutBtn").addEventListener("click",async ()=>{
   syncModal.style.display="none";

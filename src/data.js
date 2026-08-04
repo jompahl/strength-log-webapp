@@ -118,6 +118,21 @@ export async function deleteFavorite(clientId) {
   if (error) throw error;
 }
 
+// ---- One-time backfill: push an imported blob (old Sheet shape) into Supabase. ----
+// Profile + weights are handled by saveAll(); this covers the rest. Run once (no dedup
+// for manually-created entries). Returns a count summary.
+export async function backfillToSupabase(payload) {
+  const summary = { entries: 0, food: 0, favorites: 0, creatine: 0, cycle: 0 };
+  if (Array.isArray(payload.entries)) {
+    summary.entries = await insertEntries(payload.entries.filter(e => e && e.date && e.kind));
+  }
+  for (const f of payload.food || []) { if (f && f.date && f.name) { await insertFood(f); summary.food++; } }
+  for (const fav of payload.foodFavorites || []) { if (fav && fav.name) { await insertFavorite(fav); summary.favorites++; } }
+  for (const c of payload.creatine || []) { if (c && c.date && c.grams > 0) { await upsertCreatine(c.date, c.grams); summary.creatine++; } }
+  if (payload.strengthCycle) { await saveStrengthCycle(payload.strengthCycle); summary.cycle = 1; }
+  return summary;
+}
+
 // ---- Creatine (one row per day, keyed by date) ----
 export async function upsertCreatine(date, grams) {
   const userId = await currentUserId();

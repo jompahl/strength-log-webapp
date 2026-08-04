@@ -3,7 +3,8 @@ import { MUSCLE, STRENGTH_BURN } from "./domain.js";
 import { parseWorkoutCsv } from "./importWorkoutCsv.js";
 import { makeNonce, signInWithGoogleCredential, currentUser, signOut as supaSignOut, accessToken } from "./auth.js";
 import { loadAll, saveAll, insertEntry, insertEntries, upsertCreatine, deleteCreatine,
-  insertFood, deleteFood, insertFavorite, deleteFavorite } from "./data.js";
+  insertFood, deleteFood, insertFavorite, deleteFavorite, saveStrengthCycle as persistStrengthCyclePlan,
+  recordAiUsageRow } from "./data.js";
 import coachTompahlUrl from "./assets/coaches/tompahl.jpg";
 import coachCalgaroUrl from "./assets/coaches/calgaro.jpg";
 import coachJompahlUrl from "./assets/coaches/jompahl.jpg";
@@ -134,6 +135,7 @@ function recordAiUsage(usage){
     outputTokens,
     totalTokens:inputTokens+outputTokens,
   });
+  persistAiUsage(usage);
   saveStore(STORE);
 }
 
@@ -285,6 +287,8 @@ async function pullNow(){
       STORE.creatine=remote.creatine;
       STORE.food=remote.food;
       STORE.foodFavorites=remote.foodFavorites;
+      STORE.strengthCycle=remote.strengthCycle;
+      STORE.aiUsage=remote.aiUsage;
       try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
       FIRST_PULL_DONE=true;
     } else {
@@ -615,6 +619,7 @@ function saveStrengthCycle(){
   if(!validCalendarDate(startDate)){ toast("Pick a valid start date"); return; }
   if(!Number.isInteger(totalWeeks)||totalWeeks<1||totalWeeks>52){ toast("Planned weeks must be between 1 and 52"); return; }
   STORE.strengthCycle={name,startDate,totalWeeks};
+  persistStrengthCycle(STORE.strengthCycle);
   saveStore(STORE);
   closeStrengthCycleForm();
   renderStrengthCycle();
@@ -801,6 +806,14 @@ async function persistFavoriteAdd(fav){
 async function persistFavoriteDelete(id){
   if(!ID_TOKEN || !FIRST_PULL_DONE) return;
   try{ await deleteFavorite(id); }catch(e){ setSyncStatus("Couldn't remove favorite: "+(e.message||e),"err"); }
+}
+async function persistStrengthCycle(plan){
+  if(!ID_TOKEN || !FIRST_PULL_DONE) return;
+  try{ await persistStrengthCyclePlan(plan); }catch(e){ setSyncStatus("Couldn't save the cycle to the cloud: "+(e.message||e),"err"); }
+}
+async function persistAiUsage(usage){
+  if(!ID_TOKEN || !FIRST_PULL_DONE) return;
+  try{ await recordAiUsageRow(usage); }catch(e){ /* usage stats are best-effort */ }
 }
 function ouraForDay(day){ return (STORE.ouraDaily||[]).find(row=>row.date===day&&row.totalCalories>0)||null; }
 function dayTotals(day,{includeOura=true}={}){
@@ -1319,6 +1332,7 @@ document.getElementById("cycleRemove").addEventListener("click",()=>{
   if(!STORE.strengthCycle) return;
   if(!confirm("Remove the current strength cycle? Your workout history will stay untouched.")) return;
   STORE.strengthCycle=null;
+  persistStrengthCycle(null);
   saveStore(STORE);
   closeStrengthCycleForm();
   renderStrengthCycle();

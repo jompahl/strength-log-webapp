@@ -12,7 +12,7 @@ import { supabase } from './supabaseClient.js';
 
 // Pull the signed-in user's data into a STORE-shaped payload (consumed by applyPayload).
 export async function loadAll() {
-  const [profileRes, weightsRes, workoutsRes, cardioRes, creatineRes, foodsRes, favoritesRes] = await Promise.all([
+  const [profileRes, weightsRes, workoutsRes, cardioRes, creatineRes, foodsRes, favoritesRes, cycleRes, usageRes] = await Promise.all([
     supabase.from('profiles').select('data, coach_id, seed_imported').maybeSingle(),
     supabase.from('weights').select('date, kg, source').order('date', { ascending: true }),
     supabase.from('workouts')
@@ -24,8 +24,10 @@ export async function loadAll() {
     supabase.from('creatine').select('date, grams').order('date', { ascending: true }),
     supabase.from('foods').select('client_id, date, name, kcal, protein_g, carbs_g, fat_g').order('date', { ascending: true }),
     supabase.from('food_favorites').select('client_id, name, kcal, protein_g, carbs_g, fat_g'),
+    supabase.from('strength_cycles').select('plan').eq('active', true).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    supabase.from('ai_usage').select('id, ts, provider, model, request_type, input_tokens, output_tokens').order('ts', { ascending: true }),
   ]);
-  for (const r of [profileRes, weightsRes, workoutsRes, cardioRes, creatineRes, foodsRes, favoritesRes]) if (r.error) throw r.error;
+  for (const r of [profileRes, weightsRes, workoutsRes, cardioRes, creatineRes, foodsRes, favoritesRes, cycleRes, usageRes]) if (r.error) throw r.error;
 
   const profileRow = profileRes.data;
   const strengthEntries = (workoutsRes.data || []).map(fromWorkoutRow);
@@ -47,9 +49,41 @@ export async function loadAll() {
       _id: f.client_id, name: f.name,
       kcal: f.kcal, p: f.protein_g, c: f.carbs_g, fat: f.fat_g,
     })),
+    strengthCycle: cycleRes.data?.plan || null,
+    aiUsage: (usageRes.data || []).map(u => {
+      const inputTokens = u.input_tokens || 0, outputTokens = u.output_tokens || 0;
+      return {
+        id: 'ai' + u.id, createdAt: u.ts, provider: u.provider || 'anthropic', model: u.model || '',
+        requestType: u.request_type || 'text', inputTokens, outputTokens, totalTokens: inputTokens + outputTokens,
+      };
+    }),
     // not yet migrated — kept empty so rendering works without the old blob:
-    aiUsage: [], ouraDaily: [], strengthCycle: null, withingsLastSync: null, withingsBaseWeight: null,
+    ouraDaily: [], withingsLastSync: null, withingsBaseWeight: null,
   };
+}
+
+// ---- Strength cycle (single active JSONB plan per user) ----
+export async function saveStrengthCycle(plan) {
+  const userId = await currentUserId();
+  if (!userId) throw new Error('Not signed in.');
+  const del = await supabase.from('strength_cycles').delete().eq('user_id', userId);
+  if (del.error) throw del.error;
+  if (plan) {
+    const { error } = await supabase.from('strength_cycles').insert({ user_id: userId, plan, active: true });
+    if (error) throw error;
+  }
+}
+
+// ---- AI usage events (append-only) ----
+export async function recordAiUsageRow(usage) {
+  const userId = await currentUserId();
+  if (!userId) return;
+  const { error } = await supabase.from('ai_usage').insert({
+    user_id: userId, provider: usage.provider || null, model: usage.model || null,
+    request_type: usage.requestType || null,
+    input_tokens: usage.inputTokens || 0, output_tokens: usage.outputTokens || 0,
+  });
+  if (error) throw error;
 }
 
 // ---- Food log + favorites (keyed by the app's client _id) ----

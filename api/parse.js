@@ -7,7 +7,7 @@
 //
 // We verify the Google credential or signed app session so only signed-in users can spend your API budget.
 
-const { verifyRequestUser } = require('./_auth');
+const { verifyUser, getIntegration } = require('./_supabase');
 const { generate } = require('./_ai');
 
 const SYSTEM = `You are a fitness logging assistant AND a practical nutrition/training coach inside a tracker app.
@@ -63,9 +63,9 @@ module.exports = async (req, res) => {
 
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }
-  const { idToken, text, image, mediaType, context, history, conversation, localDate } = body || {};
+  const { text, image, mediaType, context, history, conversation, localDate } = body || {};
 
-  const user = await verifyRequestUser(req, idToken);
+  const user = await verifyUser(req);
   if (!user) return res.status(401).json({ ok: false, error: 'Please sign in again.' });
 
   // Build the Claude message content (text and/or image), prefixed with the snapshots
@@ -96,7 +96,11 @@ module.exports = async (req, res) => {
   const requestType = image ? 'image' : 'text';
 
   try {
-    const out = await generate({ sub: user.sub, system: SYSTEM, content, maxTokens: 1024 });
+    const key = await getIntegration(user.client, 'openrouter');
+    const out = await generate({
+      system: SYSTEM, content, maxTokens: 1024,
+      userKey: key?.secret, userModel: key?.meta?.model,
+    });
     const usage = {
       provider: out.provider,
       model: out.model,

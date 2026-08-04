@@ -1,6 +1,10 @@
 import { DB } from "./seedData.js";
 import { MUSCLE, STRENGTH_BURN } from "./domain.js";
 import { parseWorkoutCsv } from "./importWorkoutCsv.js";
+import { makeNonce, signInWithGoogleCredential, currentUser, signOut as supaSignOut, accessToken } from "./auth.js";
+import { loadAll, saveAll, insertEntry, insertEntries, upsertCreatine, deleteCreatine,
+  insertFood, deleteFood, insertFavorite, deleteFavorite, saveStrengthCycle as persistStrengthCyclePlan,
+  recordAiUsageRow, backfillToSupabase } from "./data.js";
 import coachTompahlUrl from "./assets/coaches/tompahl.jpg";
 import coachCalgaroUrl from "./assets/coaches/calgaro.jpg";
 import coachJompahlUrl from "./assets/coaches/jompahl.jpg";
@@ -44,6 +48,7 @@ const SESSION_URL = "/api/session";
 let ID_TOKEN = null;        // Google ID token during sign-in, then "session" for the HttpOnly app session
 let CURRENT_USER = null;    // {email, name}
 let GOOGLE_INITIALIZED=false;
+let SIGNIN_NONCE=null;      // raw nonce for the current one-tap init (hashed copy given to Google)
 let pushTimer=null;
 let FIRST_PULL_DONE=false;  // becomes true after the initial load; gates pushes
 
@@ -130,6 +135,7 @@ function recordAiUsage(usage){
     outputTokens,
     totalTokens:inputTokens+outputTokens,
   });
+  persistAiUsage(usage);
   saveStore(STORE);
 }
 
@@ -161,8 +167,8 @@ function renderAiUsageStatus(){
 
 // --- Bring-your-own AI key (OpenRouter) ---
 async function aiKeyCall(action, data={}){
-  const response=await fetch("/api/ai-key",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({idToken:ID_TOKEN, action, ...data})});
+  const response=await fetch("/api/ai-key",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(await accessToken())},
+    body:JSON.stringify({action, ...data})});
   const result=await response.json().catch(()=>({ok:false,error:"Invalid response from the server."}));
   if(!result.ok) throw new Error(result.error||"AI key request failed.");
   return result;
@@ -254,51 +260,62 @@ function schedulePush(){
   clearTimeout(pushTimer);
   pushTimer=setTimeout(pushNow, 1500);
 }
-async function apiCall(action, data){
-  const res=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({idToken:ID_TOKEN, action, data})});
-  return res.json();
-}
 async function pushNow(){
   if(!ID_TOKEN) return;
+  if(!FIRST_PULL_DONE) return;
   setSyncStatus("Saving…","wait");
   try{
-    const j=await apiCall("save", syncPayload());
-    if(j.ok){ const t=new Date().toLocaleTimeString(); setSyncStatus("Saved ✓ "+t,"ok"); }
-    else if(/sign-in/i.test(j.error||"")){ setSyncStatus("Session expired — sign in again.","err"); requireSignIn(); }
-    else setSyncStatus("Save error: "+(j.error||"unknown"),"err");
-  }catch(e){ setSyncStatus("Couldn't reach the server. Check your connection.","err"); }
+    await saveAll(STORE);
+    const t=new Date().toLocaleTimeString(); setSyncStatus("Saved ✓ "+t,"ok");
+  }catch(e){ setSyncStatus("Save error: "+(e.message||e),"err"); }
 }
 async function pullNow(){
   if(!ID_TOKEN) return;
   setSyncStatus("Loading your data…","wait");
   try{
-    const j=await apiCall("load", null);
-    if(j.ok){
-      const remote=j.data;
-      const hasRemote=remote&&((remote.entries&&remote.entries.length)||(remote.food&&remote.food.length)||
-        (remote.foodFavorites&&remote.foodFavorites.length)||
-        (remote.weights&&remote.weights.length)||(remote.aiUsage&&remote.aiUsage.length)||
-        (remote.ouraDaily&&remote.ouraDaily.length)||(remote.profile&&remote.profile.onboardingComplete));
-      if(hasRemote){ applyPayload(remote); FIRST_PULL_DONE=true; }
-      else {
-        // brand-new account: start blank (no demo history). Mark as initialized so
-        // the built-in DB demo data is never merged in, then save the empty state.
-        STORE.entries=STORE.entries||[]; STORE.food=STORE.food||[]; STORE.foodFavorites=STORE.foodFavorites||[]; STORE.weights=STORE.weights||[]; STORE.aiUsage=STORE.aiUsage||[];
-        STORE.seedImported=true;
-        if(STORE.profile) STORE.profile.onboardingComplete=false;
-        try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
-        FIRST_PULL_DONE=true;   // safe to push now: we've confirmed the account is empty
-        startOnboardingChat();
-      }
-      const t=new Date().toLocaleTimeString(); setSyncStatus("Synced ✓ "+t,"ok");
-      buildStrip(); buildSelect(); renderStrength(); rebuildDatalist();
-      if(document.getElementById("view-cardio").classList.contains("on")) buildCardio();
-      if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
-      if(!new URLSearchParams(location.search).has("oura")) maybeAutoSyncOura();
-    } else if(/sign-in/i.test(j.error||"")){ requireSignIn(); }
-    else setSyncStatus("Load error: "+(j.error||"unknown"),"err");
-  }catch(e){ setSyncStatus("Couldn't reach the server.","err"); }
+    const remote=await loadAll();
+    // MIGRATION SLICE: profile, weigh-ins, and workouts/cardio (entries) round-trip to
+    // Supabase. The remaining collections (food/creatine/etc.) stay in the local cache
+    // until later slices, so we merge the migrated fields rather than overwriting wholesale.
+    const hasRemote=(remote.weights&&remote.weights.length)||(remote.entries&&remote.entries.length)||(remote.profile&&remote.profile.onboardingComplete);
+    if(hasRemote){
+      if(remote.profile&&Object.keys(remote.profile).length) STORE.profile=remote.profile;
+      if(remote.coachId) STORE.coachId=remote.coachId;
+      STORE.seedImported=remote.seedImported;
+      STORE.weights=remote.weights;
+      STORE.entries=remote.entries;
+      STORE.creatine=remote.creatine;
+      STORE.food=remote.food;
+      STORE.foodFavorites=remote.foodFavorites;
+      STORE.strengthCycle=remote.strengthCycle;
+      STORE.aiUsage=remote.aiUsage;
+      try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
+      FIRST_PULL_DONE=true;
+    } else {
+      // brand-new account: start blank, run onboarding.
+      STORE.weights=STORE.weights||[]; STORE.aiUsage=STORE.aiUsage||[];
+      STORE.seedImported=true;
+      if(STORE.profile) STORE.profile.onboardingComplete=false;
+      try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
+      FIRST_PULL_DONE=true;
+      startOnboardingChat();
+    }
+    const t=new Date().toLocaleTimeString(); setSyncStatus("Synced ✓ "+t,"ok");
+    buildStrip(); buildSelect(); renderStrength(); rebuildDatalist();
+    if(document.getElementById("view-cardio").classList.contains("on")) buildCardio();
+    if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
+    if(!new URLSearchParams(location.search).has("oura")) maybeAutoSyncOura();
+  }catch(e){ setSyncStatus("Load error: "+(e.message||e),"err"); }
+}
+// Persist a newly added workout/cardio entry to Supabase (entries are append-only).
+// STORE already holds it for immediate UI; this writes the durable rows.
+async function persistNewEntry(entry){
+  try{ setSyncStatus("Saving…","wait"); await insertEntry(entry); setSyncStatus("Saved ✓ "+new Date().toLocaleTimeString(),"ok"); }
+  catch(e){ setSyncStatus("Couldn't save to the cloud: "+(e.message||e),"err"); }
+}
+async function persistNewEntries(entries){
+  try{ await insertEntries(entries); }
+  catch(e){ setSyncStatus("Some items didn't save to the cloud: "+(e.message||e),"err"); }
 }
 function setSyncStatus(msg,kind){
   const el=document.getElementById("syncStatus"); if(el){
@@ -325,43 +342,22 @@ function useSignedInUser(newUser, authToken="session"){
   showApp();
   pullNow().finally(handleIntegrationReturns);
 }
-async function createAppSession(idToken){
-  const response=await fetch(SESSION_URL,{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({idToken})});
-  const result=await response.json().catch(()=>({ok:false}));
-  if(!response.ok||!result.ok||!result.user) throw new Error(result.error||"Could not create app session.");
-  return result.user;
-}
 async function restoreAppSession(){
   try{
-    const response=await fetch(SESSION_URL,{method:"GET"});
-    if(!response.ok) return false;
-    const result=await response.json();
-    if(!result.ok||!result.authenticated||!result.user) return false;
-    useSignedInUser(result.user);
+    const user=await currentUser();     // reads the persisted Supabase session (no network)
+    if(!user) return false;
+    useSignedInUser(user);
     return true;
   }catch(e){ return false; }
 }
-async function renewAppSession(){
-  if(ID_TOKEN!=="session") return;
-  try{
-    const response=await fetch(SESSION_URL,{method:"GET"});
-    if(response.status===401) requireSignIn();
-  }catch(e){}
-}
+async function renewAppSession(){ /* Supabase auto-refreshes the session; nothing to do */ }
 async function handleCredential(resp){
-  let newUser={email:"",name:"Account"};
   try{
-    const payload=JSON.parse(atob(resp.credential.split(".")[1]));
-    newUser={email:payload.email, name:payload.name||payload.email, sub:payload.sub};
-  }catch(e){}
-  try{
-    newUser=await createAppSession(resp.credential);
-    useSignedInUser(newUser);
+    const user=await signInWithGoogleCredential(resp.credential, SIGNIN_NONCE);
+    if(!user) throw new Error("Sign-in did not return a session.");
+    useSignedInUser(user);
   }catch(e){
-    // Keep the current tab usable if session creation is temporarily unavailable.
-    useSignedInUser(newUser,resp.credential);
-    setSyncStatus("Signed in for this visit, but the 7-day session could not be saved.","err");
+    setSyncStatus("Google sign-in failed: "+(e.message||e),"err");
   }
 }
 function showApp(){
@@ -396,7 +392,7 @@ function showLocalDevSignIn(message){
     toast("Local-only mode: sync and AI calls need Vercel/API config.");
   });
 }
-function initGoogle(){
+async function initGoogle(){
   if(GOOGLE_INITIALIZED) return;
   if(!window.google||!google.accounts){ setTimeout(initGoogle,300); return; }
   if(!CLIENT_ID_RESOLVED){
@@ -408,7 +404,10 @@ function initGoogle(){
     }).catch(()=>{ showLocalDevSignIn("Couldn't reach /api/config. Continue locally, or run the Vercel API runtime."); });
     return;
   }
-  google.accounts.id.initialize({client_id:CLIENT_ID_RESOLVED, callback:handleCredential, auto_select:true});
+  // One-tap + Supabase nonce: Google gets the hashed value, Supabase gets the raw one.
+  const {raw,hashed}=await makeNonce();
+  SIGNIN_NONCE=raw;
+  google.accounts.id.initialize({client_id:CLIENT_ID_RESOLVED, callback:handleCredential, auto_select:true, nonce:hashed});
   GOOGLE_INITIALIZED=true;
   google.accounts.id.renderButton(document.getElementById("gsiButton"),
     {theme:"filled_black", size:"large", text:"continue_with", shape:"pill", width:280});
@@ -620,6 +619,7 @@ function saveStrengthCycle(){
   if(!validCalendarDate(startDate)){ toast("Pick a valid start date"); return; }
   if(!Number.isInteger(totalWeeks)||totalWeeks<1||totalWeeks>52){ toast("Planned weeks must be between 1 and 52"); return; }
   STORE.strengthCycle={name,startDate,totalWeeks};
+  persistStrengthCycle(STORE.strengthCycle);
   saveStore(STORE);
   closeStrengthCycleForm();
   renderStrengthCycle();
@@ -784,6 +784,36 @@ function creatineTarget(profileData=profile()){
 function setCreatineForDay(day,grams){
   STORE.creatine=(STORE.creatine||[]).filter(entry=>entry.date!==day);
   if(grams>0) STORE.creatine.push({date:day,grams});
+  persistCreatine(day, grams>0?grams:0);
+}
+async function persistCreatine(date, grams){
+  if(!ID_TOKEN || !FIRST_PULL_DONE) return;   // only after a signed-in load
+  try{ if(grams>0) await upsertCreatine(date,grams); else await deleteCreatine(date); }
+  catch(e){ setSyncStatus("Couldn't save creatine to the cloud: "+(e.message||e),"err"); }
+}
+async function persistFoodAdd(food){
+  if(!ID_TOKEN || !FIRST_PULL_DONE) return;
+  try{ await insertFood(food); }catch(e){ setSyncStatus("Couldn't save food to the cloud: "+(e.message||e),"err"); }
+}
+async function persistFoodDelete(id){
+  if(!ID_TOKEN || !FIRST_PULL_DONE) return;
+  try{ await deleteFood(id); }catch(e){ setSyncStatus("Couldn't remove food in the cloud: "+(e.message||e),"err"); }
+}
+async function persistFavoriteAdd(fav){
+  if(!ID_TOKEN || !FIRST_PULL_DONE) return;
+  try{ await insertFavorite(fav); }catch(e){ setSyncStatus("Couldn't save favorite: "+(e.message||e),"err"); }
+}
+async function persistFavoriteDelete(id){
+  if(!ID_TOKEN || !FIRST_PULL_DONE) return;
+  try{ await deleteFavorite(id); }catch(e){ setSyncStatus("Couldn't remove favorite: "+(e.message||e),"err"); }
+}
+async function persistStrengthCycle(plan){
+  if(!ID_TOKEN || !FIRST_PULL_DONE) return;
+  try{ await persistStrengthCyclePlan(plan); }catch(e){ setSyncStatus("Couldn't save the cycle to the cloud: "+(e.message||e),"err"); }
+}
+async function persistAiUsage(usage){
+  if(!ID_TOKEN || !FIRST_PULL_DONE) return;
+  try{ await recordAiUsageRow(usage); }catch(e){ /* usage stats are best-effort */ }
 }
 function ouraForDay(day){ return (STORE.ouraDaily||[]).find(row=>row.date===day&&row.totalCalories>0)||null; }
 function dayTotals(day,{includeOura=true}={}){
@@ -1108,7 +1138,7 @@ function removeFood(id){
   STORE.food=(STORE.food||[]).filter(f=>f._id!==id);
   if((STORE.food||[]).length===before){
     STORE.hiddenFood=STORE.hiddenFood||[]; if(!STORE.hiddenFood.includes(id)) STORE.hiddenFood.push(id);
-  }
+  } else { persistFoodDelete(id); }
   saveStore(STORE); renderCalories(); toast("Removed");
 }
 
@@ -1146,12 +1176,14 @@ function addFoodFavorite(id){
   if(findFavoriteForFood(favorite)){ toast("Already in favorites"); return; }
   STORE.foodFavorites=STORE.foodFavorites||[];
   STORE.foodFavorites.push(favorite);
+  persistFavoriteAdd(favorite);
   saveStore(STORE);
   renderCalories();
   toast("Added to favorites ★");
 }
 function removeFoodFavorite(id){
   STORE.foodFavorites=(STORE.foodFavorites||[]).filter(f=>String(f._id)!==String(id));
+  persistFavoriteDelete(id);
   saveStore(STORE);
   renderCalories();
   toast("Favorite removed");
@@ -1160,7 +1192,7 @@ function logFoodFavorite(id){
   const fav=(STORE.foodFavorites||[]).find(f=>String(f._id)===String(id));
   if(!fav){ toast("Favorite not found"); return; }
   STORE.food=STORE.food||[];
-  STORE.food.push({
+  const loggedFav={
     _id:"f"+Date.now()+Math.random().toString(36).slice(2,6),
     date:CAL_DAY,
     name:fav.name,
@@ -1169,7 +1201,9 @@ function logFoodFavorite(id){
     c:Number(fav.c||0),
     fat:Number(fav.fat||0),
     favoriteId:fav._id,
-  });
+  };
+  STORE.food.push(loggedFav);
+  persistFoodAdd(loggedFav);
   saveStore(STORE);
   renderCalories();
   toast(`Logged ${fav.name} ✓`);
@@ -1180,6 +1214,7 @@ function addFoodFavoriteFromEntry(food){
   if(findFavoriteForFood(favorite)) return false;
   STORE.foodFavorites=STORE.foodFavorites||[];
   STORE.foodFavorites.push(favorite);
+  persistFavoriteAdd(favorite);
   return true;
 }
 
@@ -1212,7 +1247,8 @@ function saveStrength(){
       if(isNaN(reps)) return; let weight=wRaw===""?0:parseFloat(wRaw); if(isNaN(weight)) weight=0; sets.push({reps,weight}); });
     if(sets.length) exercises.push({name,muscle:muscleOf(name),sets}); });
   if(!exercises.length){ toast("Add at least one exercise"); return; }
-  STORE.entries.push({kind:"strength",date,type,exercises}); saveStore(STORE);
+  const strengthEntry={kind:"strength",date,type,exercises};
+  STORE.entries.push(strengthEntry); saveStore(STORE); persistNewEntry(strengthEntry);
   toast("Session saved ✓"); document.getElementById("addForm").classList.remove("open"); document.getElementById("toggleForm").textContent="+ Add session";
   buildStrip(); buildSelect(); CURRENT_EX=exercises[0].name; document.getElementById("exSelect").value=CURRENT_EX; rebuildDatalist(); renderStrength();
 }
@@ -1224,7 +1260,7 @@ function saveCardioEntry(){
   const e={kind:"cardio",date,activity:act};
   if(!isNaN(dist)) e.distance_km=dist; if(!isNaN(time)) e.duration_min=time;
   if(!isNaN(dist)&&!isNaN(time)&&dist>0) e.pace_min_km=time/dist; if(!isNaN(cal)) e.calories=cal;
-  STORE.entries.push(e); saveStore(STORE); toast("Cardio saved ✓");
+  STORE.entries.push(e); saveStore(STORE); persistNewEntry(e); toast("Cardio saved ✓");
   document.getElementById("cardioForm").classList.remove("open"); document.getElementById("toggleCardio").textContent="+ Add cardio";
   buildCardio();
 }
@@ -1234,7 +1270,7 @@ function saveFoodEntry(){
   if(!name||isNaN(kcal)){ toast("Need a name and calories"); return; }
   const f={_id:"f"+Date.now()+Math.random().toString(36).slice(2,6),date:CAL_DAY,name,kcal,
     p:parseFloat(document.getElementById("foodP").value)||0,c:parseFloat(document.getElementById("foodC").value)||0,fat:parseFloat(document.getElementById("foodF").value)||0};
-  STORE.food=STORE.food||[]; STORE.food.push(f); saveStore(STORE);
+  STORE.food=STORE.food||[]; STORE.food.push(f); persistFoodAdd(f); saveStore(STORE);
   ["foodName","foodKcal","foodP","foodC","foodF"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("foodForm").classList.remove("open"); document.getElementById("toggleFood").textContent="+ Add food";
   toast("Food added ✓"); renderCalories();
@@ -1296,6 +1332,7 @@ document.getElementById("cycleRemove").addEventListener("click",()=>{
   if(!STORE.strengthCycle) return;
   if(!confirm("Remove the current strength cycle? Your workout history will stay untouched.")) return;
   STORE.strengthCycle=null;
+  persistStrengthCycle(null);
   saveStore(STORE);
   closeStrengthCycleForm();
   renderStrengthCycle();
@@ -1887,8 +1924,8 @@ async function chatSend(){
   document.getElementById("chatPhotoClear").click();
   addTyping();
   try{
-    const res=await fetch("/api/parse",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({idToken:ID_TOKEN, text, image:sentImage, mediaType:sentMedia, context:dayContext(), history:historyContext(), conversation:CHAT_CONTEXT.slice(-10), onboarding:ONBOARDING_ACTIVE, coachName:selectedCoach().label, localDate:localDateString()})});
+    const res=await fetch("/api/parse",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(await accessToken())},
+      body:JSON.stringify({text, image:sentImage, mediaType:sentMedia, context:dayContext(), history:historyContext(), conversation:CHAT_CONTEXT.slice(-10), onboarding:ONBOARDING_ACTIVE, coachName:selectedCoach().label, localDate:localDateString()})});
     const j=await res.json();
     removeTyping();
     if(j.usage) recordAiUsage(j.usage);
@@ -2013,7 +2050,7 @@ function showLogCard(r){
         p:parseFloat(box.querySelector(`[data-f="p"][data-i="${i}"]`).value)||0, c:it.c||0, fat:it.fat||0}));
       STORE.food=STORE.food||[];
       const loggedItems=items.map(it=>({_id:"f"+Date.now()+Math.random().toString(36).slice(2,6), date:logDate, ...it}));
-      loggedItems.forEach(it=> STORE.food.push(it));
+      loggedItems.forEach(it=>{ STORE.food.push(it); persistFoodAdd(it); });
       CAL_DAY=logDate;
       done("Added "+items.length+" item"+(items.length>1?"s":"")+" for "+fmtDate(logDate));
       showFoodFavoritePrompt(loggedItems);
@@ -2042,8 +2079,9 @@ function showLogCard(r){
       <div style="color:var(--muted); line-height:1.6">${summary}</div>
       <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px"><button class="ghost" data-x="c">Skip</button><button class="primary" data-x="ok">Add session</button></div>`;
     box.querySelector('[data-x="ok"]').onclick=()=>{
-      STORE.entries.push({kind:"strength", date:today, type:r.type||"Other",
-        exercises:r.exercises.map(ex=>({name:ex.name, muscle:(MUSCLE[ex.name]||"Other"), sets:ex.sets}))});
+      const coachStrength={kind:"strength", date:today, type:r.type||"Other",
+        exercises:r.exercises.map(ex=>({name:ex.name, muscle:(MUSCLE[ex.name]||"Other"), sets:ex.sets}))};
+      STORE.entries.push(coachStrength); persistNewEntry(coachStrength);
       done((r.type||"Strength")+" session added");
     };
   } else if(r.kind==="cardio"){
@@ -2056,7 +2094,7 @@ function showLogCard(r){
       const e={kind:"cardio", date:today, activity:r.activity||"Run"};
       if(r.distance_km) e.distance_km=r.distance_km; if(r.duration_min) e.duration_min=r.duration_min;
       if(pc) e.pace_min_km=pc; if(r.calories) e.calories=r.calories;
-      STORE.entries.push(e); done((r.activity||"Cardio")+" added");
+      STORE.entries.push(e); persistNewEntry(e); done((r.activity||"Cardio")+" added");
     };
   } else { box.innerHTML=`<span style="color:var(--muted)">Nothing to log there.</span>`; }
 
@@ -2107,6 +2145,7 @@ document.getElementById("workoutCsvConfirm").addEventListener("click",async ()=>
   if(duplicates) details.push(`${duplicates} already present`);
   if(result.skippedRows) details.push(`${result.skippedRows} unsupported row${result.skippedRows===1?'':'s'} skipped`);
   setSyncStatus(details.join(" · ")+". Saving to your account…","wait");
+  await persistNewEntries(additions);
   await pushNow();
   setSyncStatus(details.join(" · ")+" ✓","ok");
 });
@@ -2126,8 +2165,8 @@ document.getElementById("workoutAiConfirm").addEventListener("click",async ()=>{
   setSyncStatus("AI is reading and converting the workout file…","wait");
   let response;
   try{
-    response=await fetch("/api/import-workouts",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({idToken:ID_TOKEN,fileName:file.name,fileText:await file.text()})});
+    response=await fetch("/api/import-workouts",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(await accessToken())},
+      body:JSON.stringify({fileName:file.name,fileText:await file.text()})});
   }catch(e){ setSyncStatus("Could not reach the AI importer.","err"); return; }
   const result=await response.json().catch(()=>({ok:false,error:"Invalid response from the AI importer."}));
   if(result.usage) recordAiUsage(result.usage);
@@ -2149,6 +2188,7 @@ document.getElementById("workoutAiConfirm").addEventListener("click",async ()=>{
   if(duplicates) details.push(`${duplicates} already present`);
   if(result.warnings&&result.warnings.length) details.push(result.warnings[0]);
   setSyncStatus(details.join(" · ")+". Saving…","wait");
+  await persistNewEntries(additions);
   await pushNow();
   setSyncStatus(details.join(" · ")+" ✓","ok");
 });
@@ -2165,18 +2205,21 @@ document.getElementById("importConfirm").addEventListener("click",async ()=>{
   try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
   document.getElementById("importBox").style.display="none";
   document.getElementById("importText").value="";
-  setSyncStatus("Imported — saving to your account…","wait");
-  await pushNow();
+  setSyncStatus("Imported — writing to Supabase (this can take a moment)…","wait");
+  try{
+    await pushNow();                          // profile + weights
+    const s=await backfillToSupabase(parsed); // entries, food, favorites, creatine, cycle
+    setSyncStatus(`Backfilled ✓ ${s.entries} workouts/cardio · ${s.food} foods · ${s.creatine} creatine days`,"ok");
+  }catch(e){ setSyncStatus("Backfill error: "+(e.message||e),"err"); }
   // refresh all views
   buildStrip(); buildSelect(); renderStrength(); rebuildDatalist();
   if(document.getElementById("view-cardio").classList.contains("on")) buildCardio();
   if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
-  setSyncStatus("Imported and saved ✓","ok");
 });
 document.getElementById("signOutBtn").addEventListener("click",async ()=>{
   syncModal.style.display="none";
   try{ google.accounts.id.disableAutoSelect(); }catch(e){}
-  try{ await fetch(SESSION_URL,{method:"DELETE"}); }catch(e){}
+  try{ await supaSignOut(); }catch(e){}
   requireSignIn();
 });
 document.addEventListener("visibilitychange",()=>{
@@ -2192,17 +2235,7 @@ renderStrength();
 // Restore the signed, HttpOnly seven-day session. Migrate an existing valid
 // sessionStorage Google token once so current users do not have to sign in again.
 (async function initAuth(){
-  if(await restoreAppSession()) return;
-  const saved=sessionStorage.getItem("idtoken");
-  sessionStorage.removeItem("idtoken");
-  if(saved){
-    try{
-      const payload=JSON.parse(atob(saved.split(".")[1]));
-      if(payload.exp&&payload.exp*1000>Date.now()){
-        await handleCredential({credential:saved});
-        return;
-      }
-    }catch(e){}
-  }
+  sessionStorage.removeItem("idtoken");   // clear any stale token from the old session scheme
+  if(await restoreAppSession()) return;   // resume a persisted Supabase session if present
   initGoogle();
 })();

@@ -35,8 +35,9 @@ async function verifyUser(req) {
 }
 
 // Read the caller's integration secret from Vault. Returns { secret, meta } or null.
-async function getIntegration(client, provider) {
+async function getIntegration(client, provider, { optional = false } = {}) {
   const { data, error } = await client.rpc('get_integration', { p_provider: provider });
+  if (optional && error?.code === 'PGRST202') return null;
   if (error) throw new Error(error.message);
   return data || null;
 }

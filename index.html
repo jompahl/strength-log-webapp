@@ -3,23 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#13161c">
+<meta name="theme-color" content="#101925">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Strength Log">
-<title>Strength Log</title>
+<meta name="apple-mobile-web-app-title" content="AthleteOS">
+<title>AthleteOS</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <link rel="stylesheet" href="/src/styles.css">
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://accounts.google.com/gsi/client?hl=en" async defer></script>
 </head>
 <body>
 <div id="signinOverlay" style="position:fixed; inset:0; background:var(--bg); z-index:100; display:flex; align-items:center; justify-content:center; padding:24px">
   <div style="max-width:400px; width:100%; text-align:center">
     <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:8px">
       <span style="width:11px; height:11px; border-radius:50%; background:var(--amber); box-shadow:0 0 12px var(--amber)"></span>
-      <h1 style="font-size:24px; font-weight:800; letter-spacing:-0.02em">Strength Log</h1>
+      <h1 style="font-size:24px; font-weight:800">AthleteOS</h1>
     </div>
     <p style="color:var(--muted); font-size:14px; margin-bottom:26px">Track strength, cardio, and your cut — synced to your account.</p>
     <div id="gsiButton" style="display:flex; justify-content:center; margin-bottom:18px"></div>
@@ -33,7 +33,7 @@
 
 <div class="wrap" id="appWrap" style="display:none">
   <header class="top">
-    <div class="brand"><span class="dot"></span><h1>Strength Log</h1></div>
+    <div class="brand"><span class="brandMark" aria-hidden="true">A</span><span class="brandName">AthleteOS</span></div>
     <div style="display:flex; align-items:center; gap:12px">
       <button class="ghost" id="acctBtn" style="padding:7px 13px; font-size:12.5px">Account</button>
     </div>
@@ -181,7 +181,7 @@
     <div style="background:var(--panel); border:1px solid var(--line); border-radius:14px; max-width:520px; width:100%; padding:22px">
       <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px">
         <span style="width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 10px var(--amber)"></span>
-        <h2 style="font-size:18px; font-weight:800">Welcome to Strength Log</h2>
+        <h2 style="font-size:18px; font-weight:800">Welcome to AthleteOS</h2>
       </div>
       <p style="color:var(--muted); font-size:13px; line-height:1.6; margin-bottom:16px">
         Set your starting numbers and goal. The coach uses this to fill the calories tab with maintenance, protein, and daily target numbers.
@@ -210,14 +210,33 @@
     </div>
   </div>
 
-  <div class="tabs">
-    <button data-v="strength" class="on">Strength</button>
-    <button data-v="cardio">Cardio</button>
-    <button data-v="calories">Calories</button>
-  </div>
+  <nav class="tabs" aria-label="Main navigation">
+    <button type="button" data-v="overview" class="on" aria-current="page"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Overview</button>
+    <button type="button" data-v="strength"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6.5 6.5 11 11M4 10l6-6m4 16 6-6M2 8l6-6m8 20 6-6"/></svg>Strength</button>
+    <button type="button" data-v="cardio"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2 12h5l3-8 4 16 3-8h5"/></svg>Cardio</button>
+    <button type="button" data-v="calories"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 3v5a3 3 0 0 0 6 0V3M7 3v18M20 3c-3 2-4 5-4 9h4m0-9v18"/></svg>Calories</button>
+  </nav>
+
+  <main id="dashboard">
+  <section class="view on" id="view-overview" aria-labelledby="overviewTitle">
+    <header class="pageHead">
+      <div><p class="eyebrow" id="overviewDate"></p><h1 id="overviewTitle">Overview</h1></div>
+      <button type="button" class="primary" id="overviewLog">+ Log strength</button>
+    </header>
+    <div class="strip" id="overviewStats"></div>
+    <section class="overviewSection" aria-labelledby="activityTitle">
+      <h2 id="activityTitle">Recent training</h2>
+      <ul id="overviewActivity" class="activityList"></ul>
+    </section>
+  </section>
 
   <!-- STRENGTH VIEW -->
-  <div class="view on" id="view-strength">
+  <div class="view" id="view-strength">
+    <header class="pageHead">
+      <div><p class="eyebrow">Training</p><h1>Strength</h1></div>
+      <button type="button" class="primary" id="strengthLog">+ Log session</button>
+    </header>
+    <div class="strip" id="strip"></div>
     <section class="cycleCard" aria-labelledby="cycleTitle">
       <div class="cycleSummary" id="cycleSummary"></div>
       <button class="ghost" id="cycleEdit" type="button">Set cycle</button>
@@ -234,7 +253,7 @@
         </div>
       </div>
     </section>
-    <div class="strip" id="strip"></div>
+    <h2 class="sectionTitle">Exercise progression</h2>
     <div class="controls">
       <div class="selWrap"><select id="exSelect"></select></div>
       <div class="seg" id="metricSeg">
@@ -468,6 +487,7 @@
       <div class="hint" id="pGoalHint" style="margin-top:8px">Your target updates from your onboarding goal. On training days you can eat more because workout burn raises your total out.</div>
     </div>
   </div>
+  </main>
 </div>
 
 <datalist id="exNames"></datalist>
@@ -475,10 +495,10 @@
 <div class="toast" id="toast"></div>
 
 <!-- Floating coach button -->
-<button id="coachFab" style="display:none; position:fixed; bottom:22px; right:22px; z-index:70;
+<button id="coachFab" aria-label="Open coach chat" title="Open coach chat" style="display:none; position:fixed; bottom:22px; right:22px; z-index:70;
   width:58px; height:58px; border-radius:50%; border:none; cursor:pointer;
   background:var(--amber); color:#1a1205; font-size:24px; box-shadow:0 6px 24px rgba(0,0,0,0.4);
-  transition:transform .15s">💬</button>
+  transition:transform .15s"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8A8.5 8.5 0 0 1 12.5 20a8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 8.7 3.9a8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8z"/></svg></button>
 
 <!-- Chat overlay -->
 <div id="coachOverlay" style="display:none; position:fixed; inset:0; z-index:80;

@@ -1,12 +1,12 @@
 {
-  "name": "Strength Log",
-  "short_name": "Strength Log",
+  "name": "AthleteOS",
+  "short_name": "AthleteOS",
   "description": "Track strength, cardio, nutrition, and progress with Coach Jompahl.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#13161c",
-  "theme_color": "#13161c",
+  "background_color": "#101925",
+  "theme_color": "#101925",
   "orientation": "portrait",
   "icons": [
     {

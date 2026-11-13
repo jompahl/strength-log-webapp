@@ -302,6 +302,7 @@ async function pullNow(){
     }
     const t=new Date().toLocaleTimeString(); setSyncStatus("Synced ✓ "+t,"ok");
     buildStrip(); buildSelect(); renderStrength(); rebuildDatalist();
+    if(document.getElementById("view-overview").classList.contains("on")) renderOverview();
     if(document.getElementById("view-cardio").classList.contains("on")) buildCardio();
     if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
     if(!new URLSearchParams(location.search).has("oura")) maybeAutoSyncOura();
@@ -364,6 +365,7 @@ function showApp(){
   document.getElementById("signinOverlay").style.display="none";
   document.getElementById("appWrap").style.display="block";
   document.getElementById("coachFab").style.display="block";
+  if(document.getElementById("view-overview").classList.contains("on")) renderOverview();
   const b=document.getElementById("acctBtn");
   if(b&&CURRENT_USER) b.textContent=(CURRENT_USER.name||"Account").split(" ")[0];
   if(new URLSearchParams(location.search).has("welcomePreview")) startOnboardingChat();
@@ -410,7 +412,7 @@ async function initGoogle(){
   google.accounts.id.initialize({client_id:CLIENT_ID_RESOLVED, callback:handleCredential, auto_select:true, nonce:hashed});
   GOOGLE_INITIALIZED=true;
   google.accounts.id.renderButton(document.getElementById("gsiButton"),
-    {theme:"filled_black", size:"large", text:"continue_with", shape:"pill", width:280});
+    {theme:"filled_black", size:"large", text:"continue_with", shape:"pill", width:280, locale:"en"});
   google.accounts.id.prompt();
 }
 
@@ -553,6 +555,30 @@ function buildStrip(){
     <div class="stat"><div class="k">Push / Pull / Legs</div><div class="v mono" style="font-size:19px">${types.Push} · ${types.Pull} · ${types.Legs}</div></div>`;
 }
 
+function renderOverview(){
+  const today=localDateString();
+  const start=addLocalDays(today,-6);
+  const training=entries().filter(entry=>validCalendarDate(entry.date)&&entry.date<=today);
+  const week=training.filter(entry=>entry.date>=start);
+  const {intake,protein}=dayTotals(today);
+  const stats=[
+    ["Strength sessions",week.filter(entry=>entry.kind==="strength").length,"","Last 7 days"],
+    ["Cardio sessions",week.filter(entry=>entry.kind==="cardio").length,"","Last 7 days"],
+    ["Calories logged",fmt0(intake),"kcal","Today"],
+    ["Protein logged",fmt0(protein),"g","Today"],
+  ];
+  document.getElementById("overviewDate").textContent=new Intl.DateTimeFormat("en",{dateStyle:"full"}).format(new Date());
+  document.getElementById("overviewStats").innerHTML=stats.map(([label,value,unit,period])=>
+    `<div class="stat"><div class="k">${label}</div><div class="v mono">${value} <small>${unit}</small></div><div class="statPeriod">${period}</div></div>`).join("");
+  const recent=training.slice(-5).reverse();
+  document.getElementById("overviewActivity").innerHTML=recent.length?recent.map(entry=>{
+    const strength=entry.kind==="strength";
+    const title=strength?(entry.name||entry.type||"Strength session"):(entry.activity||"Cardio session");
+    const detail=strength?`${entry.exercises.length} exercises`:(entry.duration_min==null?"Cardio":`${fmt(entry.duration_min)} min`);
+    return `<li><div><strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span></div><time datetime="${entry.date}">${fmtDate(entry.date)}</time></li>`;
+  }).join(""):`<li class="emptyActivity">No training logged yet.</li>`;
+}
+
 function calendarDayNumber(ymd){
   if(!validCalendarDate(ymd)) return null;
   const [year,month,day]=ymd.split("-").map(Number);
@@ -665,13 +691,14 @@ function renderStrength(){
   buildHist(); buildPR();
 }
 function drawLine(canvasId, series, unit, meta){
+  if(typeof Chart==="undefined") return;
   const ctx=document.getElementById(canvasId); const labels=series.map(p=>fmtDate(p.date)); const vals=series.map(p=>p.value);
   if(chart&&canvasId==="mainChart") chart.destroy();
   const grad=ctx.getContext("2d").createLinearGradient(0,0,0,300);
-  grad.addColorStop(0,"rgba(245,166,35,0.22)"); grad.addColorStop(1,"rgba(245,166,35,0.01)");
+  grad.addColorStop(0,"rgba(66,217,192,0.22)"); grad.addColorStop(1,"rgba(66,217,192,0.01)");
   let runMax=-Infinity; const prF=vals.map(v=>{ const p=v>runMax; if(v>runMax)runMax=v; return p; });
-  const c=new Chart(ctx,{type:"line",data:{labels,datasets:[{data:vals,borderColor:"#f5a623",backgroundColor:grad,fill:true,borderWidth:2.5,tension:0.28,
-    pointRadius:vals.map((v,i)=>prF[i]?5:3.5),pointBackgroundColor:vals.map((v,i)=>prF[i]?"#f5a623":"#1b1f28"),pointBorderColor:"#f5a623",pointBorderWidth:2,pointHoverRadius:6}]},
+  const c=new Chart(ctx,{type:"line",data:{labels,datasets:[{data:vals,borderColor:"#42d9c0",backgroundColor:grad,fill:true,borderWidth:2.5,tension:0.28,
+    pointRadius:vals.map((v,i)=>prF[i]?5:3.5),pointBackgroundColor:vals.map((v,i)=>prF[i]?"#42d9c0":"#182433"),pointBorderColor:"#42d9c0",pointBorderWidth:2,pointHoverRadius:6}]},
     options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:"index"},
       plugins:{legend:{display:false},tooltip:{backgroundColor:"#0e1116",borderColor:"#2c323d",borderWidth:1,titleColor:"#e8eaed",bodyColor:"#f5a623",padding:11,displayColors:false,
         titleFont:{family:"Inter",weight:"600",size:12},bodyFont:{family:"SF Mono, monospace",size:14,weight:"700"},
@@ -1293,17 +1320,37 @@ function rebuildDatalist(){
 }
 
 /* ===================== EVENTS / INIT ===================== */
-document.querySelector(".tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
-  document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
-  const v=b.dataset.v; document.querySelectorAll(".view").forEach(x=>x.classList.remove("on"));
+function selectDashboard(v){
+  document.querySelectorAll(".tabs button").forEach(button=>{
+    const active=button.dataset.v===v;
+    button.classList.toggle("on",active);
+    if(active) button.setAttribute("aria-current","page");
+    else button.removeAttribute("aria-current");
+  });
+  document.querySelectorAll(".view").forEach(x=>x.classList.remove("on"));
   document.getElementById("view-"+v).classList.add("on");
+  window.scrollTo(0,0);
+  if(v==="overview") renderOverview();
+  if(v==="strength") renderStrength();
   if(v==="cardio") buildCardio();
   if(v==="calories"){
     renderCalories();
     maybeAutoSyncOura(true);
     maybeAutoSyncWithings(true);
   }
+}
+document.querySelector(".tabs").addEventListener("click",event=>{
+  const button=event.target.closest("button[data-v]");
+  if(button) selectDashboard(button.dataset.v);
 });
+function openStrengthLog(){
+  if(!document.getElementById("view-strength").classList.contains("on")) selectDashboard("strength");
+  const form=document.getElementById("addForm");
+  if(!form.classList.contains("open")) document.getElementById("toggleForm").click();
+  document.getElementById("fDate").focus();
+}
+document.getElementById("overviewLog").addEventListener("click",openStrengthLog);
+document.getElementById("strengthLog").addEventListener("click",openStrengthLog);
 document.getElementById("exSelect").addEventListener("change",e=>{ CURRENT_EX=e.target.value; renderStrength(); });
 document.getElementById("metricSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
   document.querySelectorAll("#metricSeg button").forEach(x=>x.classList.remove("on")); b.classList.add("on"); CURRENT_METRIC=b.dataset.m; renderStrength(); });

@@ -1,7 +1,8 @@
   :root{
-    --bg:#13161c; --panel:#1b1f28; --panel2:#21262f; --line:#2c323d;
-    --ink:#e8eaed; --muted:#8b93a1; --faint:#5a626f;
-    --amber:#f5a623; --green:#4ade80; --green2:#46c98b; --red:#e3604d; --blue:#5b9bd5;
+    --bg:#101925; --panel:#182433; --panel2:#1d2c3c; --line:#2e4052;
+    --ink:#eff5fa; --muted:#adbdcc; --faint:#8da1b4;
+    --accent:#42d9c0; --amber:var(--accent); --green:#83d99a; --green2:#75d8a1; --red:#ff9387; --blue:#8bbcf2;
+    --rail:208px; --mobile-nav:64px;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html{-webkit-text-size-adjust:100%}
@@ -21,12 +22,46 @@
   .range{color:var(--faint); font-size:12px}
 
   /* top tabs */
-  .tabs{display:flex; gap:4px; background:var(--panel2); border:1px solid var(--line);
-    border-radius:11px; padding:4px; margin-bottom:22px; width:fit-content}
-  .tabs button{background:transparent; border:none; color:var(--muted); padding:9px 18px;
-    font-size:13.5px; font-weight:650; cursor:pointer; border-radius:7px; transition:.12s; font-family:inherit}
-  .tabs button.on{background:var(--amber); color:#1a1205}
-  .tabs button:hover:not(.on){color:var(--ink)}
+  .tabs{display:flex; gap:4px; background:var(--panel); z-index:40}
+  .tabs button{display:flex; align-items:center; gap:10px; min-height:44px; background:transparent; border:1px solid transparent;
+    color:var(--muted); padding:8px 12px; font-size:14px; font-weight:650; cursor:pointer; border-radius:7px}
+  .tabs button.on{background:#173b40; color:var(--accent); border-color:#2e605f}
+  .tabs button:hover:not(.on){color:var(--ink); background:var(--panel2)}
+  .tabs svg,#coachFab svg{width:20px; height:20px; flex:none; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round}
+  #coachFab svg{width:25px;height:25px;vertical-align:middle}
+  .brand{align-items:center; gap:10px}
+  .brandMark{display:grid; place-items:center; width:34px; height:34px; border-radius:8px; background:var(--accent); color:var(--bg); font-weight:850}
+  .brandName{font-size:19px; font-weight:800}
+  header.top{align-items:center}
+  .pageHead{display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:22px}
+  .pageHead h1{font-size:30px; line-height:1.2}
+  .eyebrow,.statPeriod{color:var(--muted); font-size:12px}
+  .eyebrow{margin-bottom:5px}
+  .sectionTitle,.overviewSection h2{font-size:17px; margin:18px 0 12px}
+  .statPeriod{margin-top:5px}
+  .stat .k,.stat .v{letter-spacing:0}
+  .activityList{list-style:none; border-block:1px solid var(--line)}
+  .activityList li{display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px 0}
+  .activityList li+li{border-top:1px solid var(--line)}
+  .activityList strong{display:block; overflow-wrap:anywhere}
+  .activityList span,.activityList time,.emptyActivity{color:var(--muted); font-size:13px}
+  .activityList time{flex:none; font-variant-numeric:tabular-nums}
+  @media(min-width:761px){
+    .wrap{max-width:1400px; padding:24px 30px 80px calc(var(--rail) + 30px)}
+    .brand{position:fixed; left:20px; top:21px; z-index:41}
+    header.top{justify-content:flex-end; min-height:51px}
+    .tabs{position:fixed; inset:0 auto 0 0; width:var(--rail); flex-direction:column; padding:79px 14px 16px; border-right:1px solid var(--line)}
+  }
+  @media(max-width:760px){
+    .wrap{padding-bottom:calc(var(--mobile-nav) + env(safe-area-inset-bottom) + 28px)}
+    .tabs{position:fixed; inset:auto 0 0; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:3px;
+      min-height:var(--mobile-nav); padding:5px 6px calc(5px + env(safe-area-inset-bottom)); border-top:1px solid var(--line)}
+    .tabs button{flex-direction:column; justify-content:center; gap:3px; padding:4px 2px; font-size:11px}
+    #coachFab{bottom:calc(var(--mobile-nav) + env(safe-area-inset-bottom) + 12px)!important; right:14px!important; width:48px!important; height:48px!important}
+    .toast{bottom:calc(var(--mobile-nav) + env(safe-area-inset-bottom) + 12px)!important}
+    #view-strength .seg button{padding-inline:10px}
+    .pageHead h1{font-size:25px}
+  }
 
   .view{display:none} .view.on{display:block}
 
@@ -36,7 +71,7 @@
   .stat .v{font-size:25px; font-weight:700; margin-top:3px; letter-spacing:-0.01em}
   .stat .v small{font-size:13px; color:var(--muted); font-weight:500}
 
-  .cycleCard{display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,rgba(245,166,35,.10),var(--panel) 42%);border:1px solid rgba(245,166,35,.28);border-radius:12px;padding:16px;margin-bottom:14px}
+  .cycleCard{display:flex;align-items:center;gap:16px;background:var(--panel);border:1px solid #2e605f;border-radius:8px;padding:16px;margin-bottom:14px}
   .cycleSummary{flex:1;min-width:0}
   .cycleEyebrow{color:var(--amber);font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;font-weight:750;margin-bottom:3px}
   .cycleMain{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}

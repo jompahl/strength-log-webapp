@@ -4,7 +4,7 @@ import { parseWorkoutCsv } from "./importWorkoutCsv.js";
 import { makeNonce, signInWithGoogleCredential, currentUser, signOut as supaSignOut, accessToken } from "./auth.js";
 import { loadAll, saveAll, insertEntry, insertEntries, upsertCreatine, deleteCreatine,
   insertFood, deleteFood, insertFavorite, deleteFavorite, saveStrengthCycle as persistStrengthCyclePlan,
-  recordAiUsageRow, backfillToSupabase } from "./data.js";
+  recordAiUsageRow, backfillToSupabase, upsertOuraDaily } from "./data.js";
 import coachTompahlUrl from "./assets/coaches/tompahl.jpg";
 import coachCalgaroUrl from "./assets/coaches/calgaro.jpg";
 import coachJompahlUrl from "./assets/coaches/jompahl.jpg";
@@ -274,10 +274,9 @@ async function pullNow(){
   setSyncStatus("Loading your data…","wait");
   try{
     const remote=await loadAll();
-    // MIGRATION SLICE: profile, weigh-ins, and workouts/cardio (entries) round-trip to
-    // Supabase. The remaining collections (food/creatine/etc.) stay in the local cache
-    // until later slices, so we merge the migrated fields rather than overwriting wholesale.
-    const hasRemote=(remote.weights&&remote.weights.length)||(remote.entries&&remote.entries.length)||(remote.profile&&remote.profile.onboardingComplete);
+    // Most collections now round-trip through Supabase, so use the remote payload as
+    // the signed-in source of truth while keeping local cache as the offline fallback.
+    const hasRemote=remote.weights.length||remote.entries.length||remote.ouraDaily.length||remote.profile.onboardingComplete;
     if(hasRemote){
       if(remote.profile&&Object.keys(remote.profile).length) STORE.profile=remote.profile;
       if(remote.coachId) STORE.coachId=remote.coachId;
@@ -289,6 +288,7 @@ async function pullNow(){
       STORE.foodFavorites=remote.foodFavorites;
       STORE.strengthCycle=remote.strengthCycle;
       STORE.aiUsage=remote.aiUsage;
+      STORE.ouraDaily=remote.ouraDaily;
       try{ localStorage.setItem(LS_KEY, JSON.stringify(STORE)); }catch(e){}
       FIRST_PULL_DONE=true;
     } else {
@@ -1389,8 +1389,8 @@ const OURA_ERRORS={
   token_storage_failed:"Oura authorized successfully, but the token could not be saved. Check the server logs.",
 };
 async function ouraCall(action,data={}){
-  const response=await fetch("/api/oura",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({idToken:ID_TOKEN,action,...data})});
+  const response=await fetch("/api/oura",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(await accessToken())},
+    body:JSON.stringify({action,...data})});
   const result=await response.json().catch(()=>({ok:false,error:"Invalid response from Oura sync."}));
   if(!result.ok) throw new Error(result.error||"Oura sync failed.");
   return result;
@@ -1454,8 +1454,14 @@ async function syncOuraData(showMessage=true){
     const retentionStart=addLocalDays(localDateString(),-90);
     STORE.ouraDaily=[...byDate.values()].filter(row=>row.date>=retentionStart).sort((a,b)=>a.date<b.date?-1:1);
     saveStore(STORE);
-    setOuraUi({configured:true,connected:true,message:`Connected · ${result.daily.length} day${result.daily.length===1?'':'s'} synced`});
     if(document.getElementById("view-calories").classList.contains("on")) renderCalories();
+    if(!FIRST_PULL_DONE) throw new Error("Oura data is on this device. Load your account data before syncing again.");
+    try{
+      await upsertOuraDaily(result.daily);
+    }catch(e){
+      throw new Error("Oura data is on this device. Cloud save failed. Try syncing again.");
+    }
+    setOuraUi({configured:true,connected:true,message:`Connected · ${result.daily.length} day${result.daily.length===1?'':'s'} synced`});
   }catch(e){ setOuraUi({configured:true,connected:true,message:e.message}); }
 }
 async function handleOuraReturn(){
@@ -1478,8 +1484,8 @@ async function handleOuraReturn(){
 
 let WITHINGS_CONNECTED=false;
 async function withingsCall(action,data={}){
-  const response=await fetch("/api/withings",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({idToken:ID_TOKEN,action,...data})});
+  const response=await fetch("/api/withings",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(await accessToken())},
+    body:JSON.stringify({action,...data})});
   const result=await response.json().catch(()=>({ok:false,error:"Invalid response from Withings sync."}));
   if(!result.ok) throw new Error(result.error||"Withings sync failed.");
   return result;

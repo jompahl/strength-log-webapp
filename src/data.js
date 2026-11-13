@@ -4,15 +4,14 @@
 // This module only bridges STORE <-> Supabase tables (RLS scopes every query to the
 // signed-in user, so no user_id is passed from the client).
 //
-// MIGRATION STATE: profile + weights are live against Supabase. The remaining
-// collections (workouts/entries, food, creatine, oura_daily, ai_usage, strength cycle)
-// are converted in later slices; until then loadAll() returns them empty and saveAll()
-// leaves them alone.
+// MIGRATION STATE: most collections are live against Supabase. saveAll() still only
+// handles the always-on profile/weight autosave; other collections are persisted by
+// their specific mutation helpers.
 import { supabase } from './supabaseClient.js';
 
 // Pull the signed-in user's data into a STORE-shaped payload (consumed by applyPayload).
 export async function loadAll() {
-  const [profileRes, weightsRes, workoutsRes, cardioRes, creatineRes, foodsRes, favoritesRes, cycleRes, usageRes] = await Promise.all([
+  const [profileRes, weightsRes, workoutsRes, cardioRes, creatineRes, foodsRes, favoritesRes, cycleRes, usageRes, ouraRes] = await Promise.all([
     supabase.from('profiles').select('data, coach_id, seed_imported').maybeSingle(),
     supabase.from('weights').select('date, kg, source').order('date', { ascending: true }),
     supabase.from('workouts')
@@ -26,8 +25,9 @@ export async function loadAll() {
     supabase.from('food_favorites').select('client_id, name, kcal, protein_g, carbs_g, fat_g'),
     supabase.from('strength_cycles').select('plan').eq('active', true).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('ai_usage').select('id, ts, provider, model, request_type, input_tokens, output_tokens').order('ts', { ascending: true }),
+    supabase.from('oura_daily').select('date, active_cal, total_burn, synced_at').order('date', { ascending: true }),
   ]);
-  for (const r of [profileRes, weightsRes, workoutsRes, cardioRes, creatineRes, foodsRes, favoritesRes, cycleRes, usageRes]) if (r.error) throw r.error;
+  for (const r of [profileRes, weightsRes, workoutsRes, cardioRes, creatineRes, foodsRes, favoritesRes, cycleRes, usageRes, ouraRes]) if (r.error) throw r.error;
 
   const profileRow = profileRes.data;
   const strengthEntries = (workoutsRes.data || []).map(fromWorkoutRow);
@@ -57,9 +57,26 @@ export async function loadAll() {
         requestType: u.request_type || 'text', inputTokens, outputTokens, totalTokens: inputTokens + outputTokens,
       };
     }),
-    // not yet migrated — kept empty so rendering works without the old blob:
-    ouraDaily: [], withingsLastSync: null, withingsBaseWeight: null,
+    ouraDaily: (ouraRes.data || []).map(o => ({
+      date: o.date, activeCalories: o.active_cal || 0, totalCalories: o.total_burn || 0,
+      syncedAt: o.synced_at,
+    })),
+    // Withings sync metadata stays local-only for now (re-derived on next sync):
+    withingsLastSync: null, withingsBaseWeight: null,
   };
+}
+
+// ---- Oura daily burn (one row per day; upsert on sync) ----
+export async function upsertOuraDaily(rows) {
+  const userId = await currentUserId();
+  if (!userId || !rows.length) return;
+  const payload = rows.map(r => ({
+    user_id: userId, date: r.date,
+    active_cal: Math.round(r.activeCalories || 0), total_burn: Math.round(r.totalCalories || 0),
+    synced_at: r.syncedAt || new Date().toISOString(),
+  }));
+  const { error } = await supabase.from('oura_daily').upsert(payload, { onConflict: 'user_id,date' });
+  if (error) throw error;
 }
 
 // ---- Strength cycle (single active JSONB plan per user) ----
@@ -262,8 +279,7 @@ async function saveProfile(store, userId) {
   if (error) throw error;
 }
 
-// Weigh-ins are keyed (user_id, date, source); upsert current rows. We only manage
-// manual weigh-ins from here — Withings/Oura rows are written by their sync paths.
+// Weigh-ins are keyed (user_id, date, source); upsert current rows from the store.
 async function saveWeights(weights, userId) {
   const rows = weights
     .filter(w => w && w.date && w.kg != null)

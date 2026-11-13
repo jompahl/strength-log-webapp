@@ -1,5 +1,5 @@
 const crypto = require('node:crypto');
-const { verifyRequestUser } = require('./_auth');
+const { verifyUser } = require('./_supabase');
 const {
   WITHINGS_CLIENT_ID, WITHINGS_REDIRECT_URI, cookieValue, deleteToken, fetchWeights, isConfigured,
   loadToken, normalizeToken, notificationRequest, saveToken, signState, tokenRequest, usableToken,
@@ -72,7 +72,7 @@ module.exports = async (req, res) => {
   const action = body?.action || 'status';
   if (action === 'status' && !isConfigured()) return res.status(200).json({ ok: true, configured: false, connected: false });
   if (!isConfigured()) return res.status(503).json({ ok: false, error: 'Withings sync is not configured yet.' });
-  const user = await verifyRequestUser(req, body?.idToken);
+  const user = await verifyUser(req);
   if (!user) return res.status(401).json({ ok: false, error: 'Please sign in again.' });
 
   try {

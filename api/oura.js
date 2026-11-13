@@ -1,5 +1,5 @@
 const crypto = require('node:crypto');
-const { verifyRequestUser } = require('./_auth');
+const { verifyUser } = require('./_supabase');
 const {
   OURA_CLIENT_ID, OURA_REDIRECT_URI, cookieValue, deleteToken, fetchDailyActivity, isConfigured,
   loadToken, normalizeToken, saveToken, signState, tokenRequest, usableToken, verifyState,
@@ -79,7 +79,7 @@ module.exports = async (req, res) => {
   const action = body?.action || 'status';
   if (action === 'status' && !isConfigured()) return res.status(200).json({ ok: true, configured: false, connected: false });
   if (!isConfigured()) return res.status(503).json({ ok: false, error: 'Oura sync is not configured yet.' });
-  const user = await verifyRequestUser(req, body?.idToken);
+  const user = await verifyUser(req);
   if (!user) return res.status(401).json({ ok: false, error: 'Please sign in again.' });
 
   try {

@@ -83,7 +83,7 @@ module.exports = async (req, res) => {
 
   try {
     const content = [{ type: 'text', text: `File name: ${plainText(body?.fileName || 'workout export', 200)}\n\n<workout_export>\n${fileText}\n</workout_export>` }];
-    const key = await getIntegration(user.client, 'openrouter', { optional: true });
+    const key = await getIntegration(user, 'openrouter', { optional: true });
     const out = await generate({ system: SYSTEM, content, maxTokens: 24000, userKey: key?.secret, userModel: key?.meta?.model });
     if (out.stopReason === 'max_tokens' || out.stopReason === 'length') return res.status(422).json({ ok: false, error: 'The converted data was too large. Try a smaller export or split it by date.' });
     const output = out.text.replace(/```json|```/g, '').trim();

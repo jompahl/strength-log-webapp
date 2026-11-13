@@ -1,9 +1,7 @@
 // api/_supabase.js — server-side Supabase helpers for the serverless functions.
 //
 // Auth model: the browser sends its Supabase access token as `Authorization: Bearer <jwt>`.
-// We validate it and build a per-request client that acts AS that user (RLS + auth.uid()),
-// so the Vault RPCs (get/set/delete_integration) resolve to the caller's own secret.
-// No service-role key needed — only the public publishable key.
+// Verify the user with the publishable client before accessing server-only Vault RPCs.
 
 const { createClient } = require('@supabase/supabase-js');
 
@@ -35,21 +33,27 @@ async function verifyUser(req) {
 }
 
 // Read the caller's integration secret from Vault. Returns { secret, meta } or null.
-async function getIntegration(client, provider, { optional = false } = {}) {
-  const { data, error } = await client.rpc('get_integration', { p_provider: provider });
-  if (optional && error?.code === 'PGRST202') return null;
-  if (error) throw new Error(error.message);
+async function integrationRpc(user, action, args) {
+  const secret = process.env.SUPABASE_SECRET_KEY;
+  if (!secret?.startsWith('sb_secret_')) throw new Error('Personal AI key storage is not configured on the server.');
+  const client = createClient(SUPABASE_URL, secret, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { data, error } = await client.rpc(action, { ...args, p_user_id: user.sub });
+  if (error) throw new Error('Personal AI key storage is unavailable.');
+  return data;
+}
+
+async function getIntegration(user, provider, { optional = false } = {}) {
+  if (optional && !process.env.SUPABASE_SECRET_KEY) return null;
+  const data = await integrationRpc(user, 'server_get_integration', { p_provider: provider });
   return data || null;
 }
 
-async function setIntegration(client, provider, secret, meta) {
-  const { error } = await client.rpc('set_integration', { p_provider: provider, p_secret: secret, p_meta: meta || {} });
-  if (error) throw new Error(error.message);
+async function setIntegration(user, provider, secret, meta) {
+  await integrationRpc(user, 'server_set_integration', { p_provider: provider, p_secret: secret, p_meta: meta || {} });
 }
 
-async function deleteIntegration(client, provider) {
-  const { error } = await client.rpc('delete_integration', { p_provider: provider });
-  if (error) throw new Error(error.message);
+async function deleteIntegration(user, provider) {
+  await integrationRpc(user, 'server_delete_integration', { p_provider: provider });
 }
 
 module.exports = { verifyUser, getIntegration, setIntegration, deleteIntegration };

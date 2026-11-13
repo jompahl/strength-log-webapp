@@ -96,7 +96,7 @@ module.exports = async (req, res) => {
   const requestType = image ? 'image' : 'text';
 
   try {
-    const key = await getIntegration(user.client, 'openrouter', { optional: true });
+    const key = await getIntegration(user, 'openrouter', { optional: true });
     const out = await generate({
       system: SYSTEM, content, maxTokens: 1024,
       userKey: key?.secret, userModel: key?.meta?.model,

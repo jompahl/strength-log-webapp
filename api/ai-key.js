@@ -3,8 +3,7 @@
 //   action:"save"    -> validate the key against OpenRouter, then store it in Vault
 //   action:"delete"  -> remove the stored key (fall back to the app's key)
 //
-// The key lives in Supabase Vault (via the set/get/delete_integration RPCs, scoped to the
-// signed-in user). It is never sent back to the client.
+// The server-only Vault RPCs use the verified user's ID. Responses never contain the key.
 
 const { verifyUser, getIntegration, setIntegration, deleteIntegration } = require('./_supabase');
 const { DEFAULT_OPENROUTER_MODEL } = require('./_ai');
@@ -19,7 +18,7 @@ async function validateKey(apiKey, model) {
     });
     const data = await response.json().catch(() => ({}));
     if (response.status === 401) return { ok: false, error: 'That OpenRouter key was rejected. Check the key and try again.' };
-    if (data.error) return { ok: false, error: data.error.message || 'OpenRouter rejected the key or model.' };
+    if (!response.ok || data.error) return { ok: false, error: 'OpenRouter rejected the key or model.' };
     return { ok: true };
   } catch (e) {
     return { ok: false, error: 'Could not reach OpenRouter to verify the key. Try again in a moment.' };
@@ -27,6 +26,7 @@ async function validateKey(apiKey, model) {
 }
 
 module.exports = async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -42,11 +42,11 @@ module.exports = async (req, res) => {
 
   try {
     if (action === 'status') {
-      const current = await getIntegration(user.client, 'openrouter');
+      const current = await getIntegration(user, 'openrouter');
       return res.status(200).json({ ok: true, hasKey: !!current?.secret, model: current?.meta?.model || DEFAULT_OPENROUTER_MODEL });
     }
     if (action === 'delete') {
-      await deleteIntegration(user.client, 'openrouter');
+      await deleteIntegration(user, 'openrouter');
       return res.status(200).json({ ok: true, hasKey: false, model: DEFAULT_OPENROUTER_MODEL });
     }
     if (action === 'save') {
@@ -57,7 +57,7 @@ module.exports = async (req, res) => {
       }
       const check = await validateKey(key, model);
       if (!check.ok) return res.status(400).json({ ok: false, error: check.error });
-      await setIntegration(user.client, 'openrouter', key, { model });
+      await setIntegration(user, 'openrouter', key, { model });
       return res.status(200).json({ ok: true, hasKey: true, model });
     }
     return res.status(400).json({ ok: false, error: 'Unknown action.' });

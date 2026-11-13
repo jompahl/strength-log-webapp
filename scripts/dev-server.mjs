@@ -14,6 +14,7 @@ const apiHandlers = {
   '/api/session': require('../api/session.js'),
   '/api/sync': require('../api/sync.js'),
   '/api/parse': require('../api/parse.js'),
+  '/api/ai-key': require('../api/ai-key.js'),
   '/api/import-workouts': require('../api/import-workouts.js'),
   '/api/oura': require('../api/oura.js'),
   '/api/withings': require('../api/withings.js'),

@@ -7,8 +7,8 @@
 
 const { createClient } = require('@supabase/supabase-js');
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://nofrspjygkfumxrgyjwa.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_4na9OUXbjR0yq4oKl4FrDw_68B9dznN';
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://uxfbrtsmdagesdljucro.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_VcN9nc7-rV49IacNWLcQ4Q_n577_KrE';
 
 function bearerToken(req) {
   const header = req.headers?.authorization || req.headers?.Authorization || '';
